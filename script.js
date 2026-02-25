@@ -946,11 +946,11 @@ function renderTableView() {
         };
 
         tr.innerHTML = `
-            <td style="font-weight: 500;">${session.topic}</td>
-            <td style="color: var(--text-secondary);"><i class="fa-regular fa-calendar" style="margin-right: 0.5rem; opacity: 0.7;"></i>${session.dateRead}</td>
-            <td class="center-col">${getStatusCell(session, 'rev2')}</td>
-            <td class="center-col">${getStatusCell(session, 'rev4')}</td>
-            <td class="center-col">${getStatusCell(session, 'rev7')}</td>
+            <td data-label="Chapter / Topic" style="font-weight: 500;">${session.topic}</td>
+            <td data-label="Date Read" style="color: var(--text-secondary);"><i class="fa-regular fa-calendar" style="margin-right: 0.5rem; opacity: 0.7;"></i>${session.dateRead}</td>
+            <td data-label="2-Day Rev" class="center-col">${getStatusCell(session, 'rev2')}</td>
+            <td data-label="4-Day Rev" class="center-col">${getStatusCell(session, 'rev4')}</td>
+            <td data-label="7-Day Rev" class="center-col">${getStatusCell(session, 'rev7')}</td>
         `;
 
         revisionTableBody.appendChild(tr);

@@ -1468,24 +1468,69 @@ main#hourLogView.active {
         white-space: nowrap;
     }
 
+    /* Transform Log Table into Cards for Mobile */
     .table-container {
         padding-bottom: 0.5rem;
         width: 100%;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
+        overflow-x: visible;
+        /* Remove horizontal scroll */
     }
 
-    .revision-table {
-        min-width: 600px;
-        /* Force horizontal scroll rather than crushing header text */
-    }
-
+    .revision-table,
+    .revision-table thead,
+    .revision-table tbody,
     .revision-table th,
+    .revision-table td,
+    .revision-table tr {
+        display: block;
+    }
+
+    /* Hide table headers completely visually */
+    .revision-table thead tr {
+        display: none;
+    }
+
+    .revision-table tr {
+        border: 1px solid var(--glass-border);
+        border-radius: 1rem;
+        margin-bottom: 1rem;
+        background: rgba(0, 0, 0, 0.15);
+        padding: 0.5rem 0;
+    }
+
     .revision-table td {
-        padding: 0.5rem 0.75rem;
-        font-size: 0.85rem;
+        /* Behave like a "row" inside the card */
+        border: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        position: relative;
+        padding: 0.75rem 1rem 0.75rem 45% !important;
+        white-space: normal;
+        text-align: right !important;
+        min-height: 2.5rem;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        font-size: 0.9rem !important;
+    }
+
+    .revision-table td:last-child {
+        border-bottom: 0;
+    }
+
+    /* Formats the pseudo-element label injected by JavaScript */
+    .revision-table td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 1rem;
+        width: 40%;
+        padding-right: 10px;
         white-space: nowrap;
-        /* Prevent chapter titles from wrapping into tall clumsy columns */
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
     /* Time Tracker History Feed */
