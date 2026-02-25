@@ -1164,6 +1164,60 @@ main#hourLogView.active {
     gap: 0.5rem;
 }
 
+/* AI Star Rating */
+.ai-rating-container {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(0, 0, 0, 0.2));
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow: 0 10px 25px rgba(251, 191, 36, 0.05);
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+.ai-rating-score {
+    font-size: 3rem;
+    font-weight: 800;
+    line-height: 1;
+    background: linear-gradient(to right, #fbbf24, #f59e0b);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
+
+.ai-rating-total {
+    font-size: 1.5rem;
+    font-weight: 600;
+    -webkit-text-fill-color: var(--text-secondary);
+}
+
+.ai-rating-stars {
+    display: flex;
+    gap: 0.25rem;
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.ai-rating-stars .fa-star.filled {
+    color: #fbbf24;
+    filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.5));
+}
+
+.ai-rating-label {
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
 /* AI Loading Animation */
 .ai-loading {
     display: flex;

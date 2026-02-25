@@ -10,6 +10,7 @@ const SUBJECT_COLORS = {
 
 let studySessions = JSON.parse(localStorage.getItem('studySessions')) || [];
 let timeLogs = JSON.parse(localStorage.getItem('timeLogs')) || [];
+let aiRatingsHistory = JSON.parse(localStorage.getItem('aiRatingsHistory')) || [];
 
 // Immediately seed IndexedDB mirror from localStorage if data exists
 // (ensures IndexedDB always has a copy even if it was never mirrored before)
@@ -962,8 +963,8 @@ document.getElementById('importFile').addEventListener('change', importBackup);
 document.getElementById('btnDisconnectBackup').addEventListener('click', disconnectBackup);
 
 function exportBackup() {
-    // Study data backup only (insights have their own file)
-    const dataStr = btoa(JSON.stringify({ studySessions, timeLogs }));
+    // Study data backup only (insights have their own file unless specifically requested)
+    const dataStr = btoa(JSON.stringify({ studySessions, timeLogs, aiRatingsHistory }));
     const dataBlob = new Blob([dataStr], { type: 'text/plain' });
     const url = URL.createObjectURL(dataBlob);
 
@@ -1005,6 +1006,10 @@ function importBackup(e) {
             } else if (importedData && typeof importedData === 'object' && ('studySessions' in importedData || 'timeLogs' in importedData)) {
                 if (importedData.studySessions) studySessions = importedData.studySessions;
                 if (importedData.timeLogs) timeLogs = importedData.timeLogs;
+                if (importedData.aiRatingsHistory) {
+                    aiRatingsHistory = importedData.aiRatingsHistory;
+                    localStorage.setItem('aiRatingsHistory', JSON.stringify(aiRatingsHistory));
+                }
                 saveToLocalStorage();
                 renderDashboard();
                 renderTableView();
@@ -1125,7 +1130,7 @@ async function autoBackupSync() {
         }
         const fileHandle = await backupDirHandle.getFileHandle('StudyTracker_AutoBackup.backup', { create: true });
         const writable = await fileHandle.createWritable();
-        await writable.write(btoa(JSON.stringify({ studySessions, timeLogs })));
+        await writable.write(btoa(JSON.stringify({ studySessions, timeLogs, aiRatingsHistory })));
         await writable.close();
     } catch (error) {
         console.error("Auto-Backup save failed:", error);
@@ -1199,13 +1204,14 @@ loadApiKey();
 
 let lastInsightsPeriod = null;
 
-function saveLatestInsights(feedbackHtml, chartData, periodLabel) {
-    localStorage.setItem('aiLatestInsights', JSON.stringify({
+function saveLatestInsights(feedbackHtml, chartData, periodLabel, ratingObj) {
+    localStorage.setItem('aiLatestInsights', JSON.parse(JSON.stringify({
         feedback: feedbackHtml,
         chartData: chartData || null,
         period: periodLabel,
+        rating: ratingObj || null,
         timestamp: Date.now()
-    }));
+    })));
 }
 
 function loadLatestInsights() {
@@ -1216,6 +1222,11 @@ function loadLatestInsights() {
         contentEl.innerHTML = data.feedback;
         if (data.chartData && data.chartData.subjectHours) {
             renderSubjectDistChartWithData(data.chartData.subjectHours);
+        }
+        if (data.rating) {
+            renderStarRating(data.rating.score);
+        } else {
+            document.getElementById('aiRatingContainer').style.display = 'none';
         }
         lastInsightsPeriod = data.period;
         updateHistoryStatus();
@@ -1903,8 +1914,13 @@ Now analyze:
 6. Personal interests assessment: Are side projects eating into study time? Should they be scheduled differently?
 
 End with a concrete, specific action plan for tomorrow with exact time blocks.
+Be brutally honest. Reference specific activities by name and time. This student wants REAL coaching, not encouragement.
 
-Be brutally honest. Reference specific activities by name and time. This student wants REAL coaching, not encouragement.`;
+CRITICAL FINAL INSTRUCTION:
+At the very end of your response, on a new line, you MUST provide an overall rating of the student's performance out of 10 based on their discipline, focus, and adherence to academic subjects vs distractions.
+Format it EXACTLY like this with no extra spaces or words around the brackets:
+[[RATING: X/10]]
+Where X is a number from 1 to 10.`;
 
 
 
@@ -1925,9 +1941,37 @@ Be brutally honest. Reference specific activities by name and time. This student
         }
 
         const result = await response.json();
-        const aiText = result.choices?.[0]?.message?.content;
+        let aiText = result.choices?.[0]?.message?.content;
 
         if (!aiText) throw new Error('No response from AI');
+
+        // Extract Rating
+        let ratingObj = null;
+        const ratingMatch = aiText.match(/\[\[RATING:\s*(\d+)\/10\]\]/i);
+        if (ratingMatch) {
+            const score = parseInt(ratingMatch[1], 10);
+            ratingObj = { score: score };
+
+            // Remove the rating bracket from the visual text
+            aiText = aiText.replace(/\[\[RATING:\s*\d+\/10\]\]/gi, '').trim();
+
+            // Save to history list
+            aiRatingsHistory.push({
+                timestamp: Date.now(),
+                dateLabel: new Date().toLocaleDateString(),
+                period: currentPeriod,
+                score: score
+            });
+            localStorage.setItem('aiRatingsHistory', JSON.stringify(aiRatingsHistory));
+
+            // Trigger auto-backup so it syncs this new history
+            autoBackupSync();
+
+            // Render on UI
+            renderStarRating(score);
+        } else {
+            document.getElementById('aiRatingContainer').style.display = 'none';
+        }
 
         const feedbackHtml = markdownToHtml(aiText);
         contentEl.innerHTML = feedbackHtml;
@@ -1935,7 +1979,7 @@ Be brutally honest. Reference specific activities by name and time. This student
         // Save latest to localStorage (survives refresh)
         const periodNames = { today: 'Today', week: 'This Week', month: 'This Month' };
         lastInsightsPeriod = `${periodNames[currentPeriod]} (${new Date().toLocaleDateString()})`;
-        saveLatestInsights(feedbackHtml, aiChartData, lastInsightsPeriod);
+        saveLatestInsights(feedbackHtml, aiChartData, lastInsightsPeriod, ratingObj);
         updateHistoryStatus();
 
     } catch (error) {
@@ -2044,6 +2088,28 @@ navBtns.forEach(btn => {
         }
     });
 });
+
+// Render Star Rating UI based on numeric score
+function renderStarRating(score) {
+    const container = document.getElementById('aiRatingContainer');
+    const numberEl = document.getElementById('aiRatingNumber');
+    const starsEl = document.getElementById('aiRatingStars');
+
+    numberEl.textContent = score;
+    let starsHtml = '';
+
+    // We want exactly 10 stars total
+    for (let i = 1; i <= 10; i++) {
+        if (i <= score) {
+            starsHtml += '<i class="fa-solid fa-star filled"></i>';
+        } else {
+            starsHtml += '<i class="fa-regular fa-star"></i>';
+        }
+    }
+
+    starsEl.innerHTML = starsHtml;
+    container.style.display = 'flex';
+}
 
 // Bootstrap Application
 init();
