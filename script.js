@@ -1740,11 +1740,83 @@ function renderRevisionChart() {
     });
 }
 
+// --- Chart 5: AI Rating Trend ---
+function renderAIRatingChart() {
+    const { start, end } = getDateRange(currentPeriod);
+
+    // Sort chronologically and filter to current period
+    const sortedHistory = [...aiRatingsHistory].sort((a, b) => a.timestamp - b.timestamp);
+    const filteredHistory = sortedHistory.filter(r => {
+        const d = new Date(r.timestamp);
+        // Include if within range. Also include if period is 'today' since date range boundaries might be tight.
+        if (currentPeriod === 'today') return r.dateLabel === new Date().toLocaleDateString();
+        return d >= start && d <= new Date(end.getTime() + 86400000); // end is start of day, pad 1 day
+    });
+
+    const labels = filteredHistory.length > 0 ? filteredHistory.map(r => r.dateLabel) : ['No Data'];
+    const data = filteredHistory.length > 0 ? filteredHistory.map(r => r.score) : [];
+
+    const ctx = document.getElementById('chartAIRating').getContext('2d');
+    if (chartInstances.aiRating) chartInstances.aiRating.destroy();
+
+    chartInstances.aiRating = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'AI Rating',
+                data,
+                borderColor: '#fbbf24',
+                backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                borderWidth: 3,
+                pointBackgroundColor: '#fff',
+                pointBorderColor: '#fbbf24',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 10,
+                    ticks: { color: '#94a3b8', stepSize: 2 },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                x: {
+                    ticks: { color: '#94a3b8', maxTicksLimit: 7 },
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    titleColor: '#fff',
+                    bodyColor: '#fbbf24',
+                    borderColor: 'rgba(251,191,36,0.3)',
+                    borderWidth: 1,
+                    padding: 12,
+                    cornerRadius: 10,
+                    callbacks: {
+                        label: (ctx) => `Score: ${ctx.parsed.y}/10`
+                    }
+                }
+            }
+        }
+    });
+}
 function renderAllCharts() {
     renderStudyHoursChart();
     renderSubjectDistChart();
     renderPeakHoursChart();
     renderRevisionChart();
+    renderAIRatingChart();
 
     // Update date range labels on charts
     const { start, end } = getDateRange(currentPeriod);
@@ -1753,7 +1825,7 @@ function renderAllCharts() {
         ? fmt(end)
         : `${fmt(start)} – ${fmt(end)}`;
 
-    ['chartRangeStudy', 'chartRangeSubject', 'chartRangePeak', 'chartRangeRev'].forEach(id => {
+    ['chartRangeStudy', 'chartRangeSubject', 'chartRangePeak', 'chartRangeRev', 'chartRangeRating'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.textContent = `📅 ${rangeText}`;
     });

@@ -54,9 +54,9 @@
                 <div style="width: 1px; height: 28px; background: rgba(255,255,255,0.15); margin: 0 0.25rem;"></div>
 
                 <button id="btnExport" class="btn-utility" title="Manual Export Backup to JSON"><i
-                        class="fa-solid fa-download"></i></button>
+                        class="fa-solid fa-file-export"></i></button>
                 <label for="importFile" class="btn-utility" title="Manual Import Backup from JSON/Backup"><i
-                        class="fa-solid fa-upload"></i></label>
+                        class="fa-solid fa-file-import"></i></label>
                 <input type="file" id="importFile" accept=".json,.backup" style="display: none;">
             </div>
         </header>
@@ -318,6 +318,13 @@
                             style="opacity:0.6;"></span></p>
                     <div class="chart-container">
                         <canvas id="chartRevisionRate"></canvas>
+                    </div>
+                </div>
+                <div class="chart-panel glass-panel" style="grid-column: 1 / -1; min-height: 280px;">
+                    <h3><i class="fa-solid fa-star" style="color: #fbbf24;"></i> AI Rating Trend</h3>
+                    <p class="chart-description">Your performance score history across analyzed periods.</p>
+                    <div class="chart-container" style="height: 220px;">
+                        <canvas id="chartAIRating"></canvas>
                     </div>
                 </div>
             </div>
