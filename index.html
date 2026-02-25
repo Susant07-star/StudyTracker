@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyTracker - 2-4-7 Spaced Repetition</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header Section -->
+        <header class="top-nav">
+            <div class="logo">
+                <i class="fa-solid fa-brain"></i>
+                <h1>StudyTracker</h1>
+            </div>
+            <p class="tagline">Master your memory with the 2-4-7 Revision Method</p>
+
+            <div class="app-nav">
+                <button type="button" class="nav-btn active" data-view="dashboardView"><i
+                        class="fa-solid fa-layer-group"></i>
+                    Dashboard</button>
+                <button type="button" class="nav-btn" data-view="tableView"><i class="fa-solid fa-table"></i> Log
+                    Table</button>
+                <button type="button" class="nav-btn" data-view="hourLogView"><i class="fa-solid fa-clock"></i> Time
+                    Tracker</button>
+                <button type="button" class="nav-btn" data-view="insightsView"><i
+                        class="fa-solid fa-wand-magic-sparkles"></i> AI
+                    Insights</button>
+            </div>
+
+            <div class="backup-controls"
+                style="display: flex; gap: 0.75rem; align-items: center; justify-content: center;">
+                <button id="btnAutoBackup" class="btn-utility btn-auto-sync" title="Enable Auto-Backup to Folder"
+                    style="width: auto; padding: 0 1.25rem; border-radius: 2rem; gap: 0.5rem; font-size: 0.95rem; font-weight: 500;">
+                    <i class="fa-solid fa-folder-tree"></i> <span>Auto-Backup</span>
+                </button>
+
+                <button id="btnDisconnectBackup" class="btn-utility" title="Disconnect Auto-Backup Folder"
+                    style="display: none; color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1);">
+                    <i class="fa-solid fa-link-slash"></i>
+                </button>
+
+                <div style="width: 1px; height: 28px; background: rgba(255,255,255,0.15); margin: 0 0.25rem;"></div>
+
+                <button id="btnExport" class="btn-utility" title="Manual Export Backup to JSON"><i
+                        class="fa-solid fa-download"></i></button>
+                <label for="importFile" class="btn-utility" title="Manual Import Backup from JSON/Backup"><i
+                        class="fa-solid fa-upload"></i></label>
+                <input type="file" id="importFile" accept=".json,.backup" style="display: none;">
+            </div>
+        </header>
+
+        <!-- Dashboard View -->
+        <main id="dashboardView" class="main-content view-section active">
+            <!-- Left Column: Add New Study Session Form -->
+            <section class="add-session-section glass-panel">
+                <h2><i class="fa-solid fa-plus-circle"></i> Log New Session</h2>
+                <form id="addSessionForm">
+                    <div class="form-group">
+                        <label for="subject">Subject</label>
+                        <select id="subject" required>
+                            <option value="" disabled selected>Select Subject...</option>
+                            <option value="Physics">Physics</option>
+                            <option value="Chemistry">Chemistry</option>
+                            <option value="Maths">Maths</option>
+                            <option value="Computer">Computer</option>
+                            <option value="English">English</option>
+                            <option value="Nepali">Nepali</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="topic">Topic / Chapter</label>
+                        <input type="text" id="topic" placeholder="e.g. Thermodynamics, Calculus..." required>
+                    </div>
+                    <div class="form-group">
+                        <label for="dateRead">Date Read</label>
+                        <input type="date" id="dateRead" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Add to Tracker <i
+                            class="fa-solid fa-arrow-right"></i></button>
+                </form>
+            </section>
+
+            <!-- Right Column: Dashboard & Topic List -->
+            <section class="dashboard-section">
+                <!-- Today's Top Priority -->
+                <div class="today-revisions glass-panel highlight-panel">
+                    <div class="panel-header">
+                        <h2><i class="fa-solid fa-fire"></i> Today's Revisions</h2>
+                        <span id="currentDateDisplay" class="date-badge"></span>
+                    </div>
+                    <div id="todayRevisionList" class="revision-cards">
+                        <!-- Revision Cards dynamically injected via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- All Tracked Topics & Filters -->
+                <div class="all-topics glass-panel">
+                    <h2><i class="fa-solid fa-book-open"></i> Ongoing Revisions</h2>
+                    <div class="filter-group">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="Physics">Physics</button>
+                        <button class="filter-btn" data-filter="Chemistry">Chemistry</button>
+                        <button class="filter-btn" data-filter="Maths">Maths</button>
+                        <button class="filter-btn" data-filter="Computer">Computer</button>
+                        <button class="filter-btn" data-filter="English">English</button>
+                        <button class="filter-btn" data-filter="Nepali">Nepali</button>
+                    </div>
+                    <div id="allTopicsList" class="topics-list">
+                        <!-- Listed Items dynamically injected via JavaScript -->
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Table View -->
+        <main id="tableView" class="table-content view-section">
+            <div class="glass-panel table-panel">
+                <div class="table-header-section">
+                    <h2><i class="fa-solid fa-table-list"></i> Subject Logs & Status</h2>
+                </div>
+
+                <div class="subject-tabs">
+                    <button class="sub-tab active" data-subject="Physics">Physics</button>
+                    <button class="sub-tab" data-subject="Chemistry">Chemistry</button>
+                    <button class="sub-tab" data-subject="Maths">Maths</button>
+                    <button class="sub-tab" data-subject="Computer">Computer</button>
+                    <button class="sub-tab" data-subject="English">English</button>
+                    <button class="sub-tab" data-subject="Nepali">Nepali</button>
+                </div>
+
+                <div class="table-container">
+                    <table class="revision-table">
+                        <thead>
+                            <tr>
+                                <th>Chapter / Topic</th>
+                                <th>Date Read</th>
+                                <th class="center-col">2-Day Rev</th>
+                                <th class="center-col">4-Day Rev</th>
+                                <th class="center-col">7-Day Rev</th>
+                            </tr>
+                        </thead>
+                        <tbody id="revisionTableBody">
+                            <!-- Table rows injected via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- Time Tracker View -->
+        <main id="hourLogView" class="main-content view-section">
+            <!-- Input Section -->
+            <section class="add-session-section glass-panel">
+                <h2><i class="fa-solid fa-stopwatch" style="color: var(--color-computer);"></i> Log Activity</h2>
+                <form id="addTimeLogForm">
+                    <div class="form-group">
+                        <label>Task / Activity Name</label>
+                        <input type="text" id="timeTaskInput" required
+                            placeholder="e.g. Math homework, Coding side-project" autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Subject <span style="font-size: 0.8em; opacity: 0.6;">(for accurate
+                                analytics)</span></label>
+                        <select id="timeSubjectInput">
+                            <option value="">General / Other</option>
+                            <option value="Physics">Physics</option>
+                            <option value="Chemistry">Chemistry</option>
+                            <option value="Maths">Maths</option>
+                            <option value="Computer">Computer</option>
+                            <option value="English">English</option>
+                            <option value="Nepali">Nepali</option>
+                            <option value="Sleep">😴 Sleep</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Start Time</label>
+                            <input type="time" id="timeStartInput" required>
+                        </div>
+                        <div class="form-group">
+                            <label>End Time</label>
+                            <input type="time" id="timeEndInput" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="timeDateInput" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Short Notes <span style="font-size: 0.8em; opacity: 0.6;">(Describe what you
+                                did)</span></label>
+                        <textarea id="timeNotesInput"
+                            placeholder="Describe what you worked on... e.g. Completed 3 problems on integration, Read chapter 5 pages 120-145..."
+                            autocomplete="off" required rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn-primary"
+                        style="background: var(--color-computer); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">
+                        Save Log <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+            </section>
+
+            <!-- History Feed Section -->
+            <section class="dashboard-section">
+                <div class="time-tracker-analytics glass-panel highlight-panel">
+                    <div class="analytics-value" id="totalHoursToday">0.0</div>
+                    <div class="analytics-label">Hours Logged Today</div>
+                </div>
+
+                <div class="glass-panel">
+                    <div class="panel-header">
+                        <h2><i class="fa-solid fa-timeline"></i> Activity History</h2>
+                        <!-- simple date filter via native date picker to see other days -->
+                        <input type="date" id="historyDateFilter"
+                            style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: white; border-radius: 1rem; padding: 0.5rem 1rem; outline: none; font-family: inherit;">
+                    </div>
+                    <div id="timeLogFeed" class="time-log-feed">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- AI Insights View -->
+        <main id="insightsView" class="view-section insights-view">
+            <!-- API Key Configuration -->
+            <div class="glass-panel insights-api-config">
+                <div class="api-config-row">
+                    <div class="api-config-info">
+                        <h3><i class="fa-solid fa-key" style="color: #fbbf24;"></i> Groq API Key <span
+                                style="font-size: 0.75em; opacity: 0.6;">(Free)</span></h3>
+                        <p id="apiKeyStatus">No API key configured — <a href="https://console.groq.com/keys"
+                                target="_blank" style="color: #a5b4fc; text-decoration: underline;">Get free key
+                                here</a></p>
+                    </div>
+                    <div class="api-config-actions">
+                        <input type="password" id="geminiApiKeyInput" placeholder="Paste your Groq API key..."
+                            autocomplete="off">
+                        <button id="btnSaveApiKey" class="btn-save-key"><i class="fa-solid fa-check"></i> Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Period Selector + Generate Button -->
+            <div class="insights-controls">
+                <div class="period-selector">
+                    <button class="period-btn active" data-period="today">Today</button>
+                    <button class="period-btn" data-period="week">This Week</button>
+                    <button class="period-btn" data-period="month">This Month</button>
+                </div>
+                <button id="btnGenerateInsights" class="btn-generate">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Insights
+                </button>
+            </div>
+
+            <!-- Insights History Browser -->
+            <div class="insights-history-bar glass-panel">
+                <div class="history-nav">
+                    <button id="btnPrevDay" class="history-arrow" title="Previous Day"><i
+                            class="fa-solid fa-chevron-left"></i></button>
+                    <div class="history-date-display">
+                        <i class="fa-solid fa-calendar-day" style="color: #6366f1;"></i>
+                        <input type="date" id="insightsDatePicker"
+                            style="background: transparent; border: none; color: white; font-family: inherit; font-size: 0.95rem; cursor: pointer; outline: none;">
+                    </div>
+                    <button id="btnNextDay" class="history-arrow" title="Next Day"><i
+                            class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                <span id="insightsHistoryStatus"
+                    style="font-size: 0.8rem; color: var(--text-secondary); opacity: 0.7;"></span>
+            </div>
+
+            <!-- Charts Grid -->
+            <div class="insights-grid">
+                <div class="chart-panel glass-panel">
+                    <h3><i class="fa-solid fa-chart-area" style="color: #6366f1;"></i> Study Hours Trend</h3>
+                    <p class="chart-description">Daily study hours over the selected period. <span id="chartRangeStudy"
+                            style="opacity:0.6;"></span></p>
+                    <div class="chart-container">
+                        <canvas id="chartStudyHours"></canvas>
+                    </div>
+                </div>
+                <div class="chart-panel glass-panel">
+                    <h3><i class="fa-solid fa-chart-pie" style="color: #ec4899;"></i> Subject Distribution</h3>
+                    <p class="chart-description">Time per subject. <span id="chartRangeSubject"
+                            style="opacity:0.6;"></span></p>
+                    <div class="chart-container">
+                        <canvas id="chartSubjectDist"></canvas>
+                    </div>
+                </div>
+                <div class="chart-panel glass-panel">
+                    <h3><i class="fa-solid fa-chart-bar" style="color: #10b981;"></i> Peak Productivity Hours</h3>
+                    <p class="chart-description">Which hours you study most. <span id="chartRangePeak"
+                            style="opacity:0.6;"></span></p>
+                    <div class="chart-container">
+                        <canvas id="chartPeakHours"></canvas>
+                    </div>
+                </div>
+                <div class="chart-panel glass-panel">
+                    <h3><i class="fa-solid fa-bullseye" style="color: #f59e0b;"></i> Revision Completion</h3>
+                    <p class="chart-description">2-4-7 spaced repetition progress. <span id="chartRangeRev"
+                            style="opacity:0.6;"></span></p>
+                    <div class="chart-container">
+                        <canvas id="chartRevisionRate"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Feedback Panel -->
+            <div class="ai-feedback-panel glass-panel">
+                <div class="ai-feedback-header">
+                    <h3><i class="fa-solid fa-robot" style="color: #6366f1;"></i> AI Analysis & Feedback</h3>
+                    <div id="aiLoadingIndicator" class="ai-loading" style="display: none;">
+                        <div class="ai-loading-dot"></div>
+                        <div class="ai-loading-dot"></div>
+                        <div class="ai-loading-dot"></div>
+                    </div>
+                </div>
+                <div id="aiFeedbackContent" class="ai-feedback-content">
+                    <div class="ai-placeholder">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <p>Click <strong>"Generate AI Insights"</strong> to get personalized study feedback & analysis
+                            powered by Groq AI.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Main Logic Script -->
+    <script src="script.js"></script>
+</body>
+
+</html>
