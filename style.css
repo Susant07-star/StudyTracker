@@ -1359,39 +1359,41 @@ main#hourLogView.active {
 
 @media (max-width: 768px) {
     .app-container {
-        padding: 1rem;
+        padding: 0.5rem;
     }
 
     /* Header & Navigation */
     .top-nav {
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
     }
 
     .logo {
-        font-size: 2rem;
+        font-size: 1.8rem;
         flex-wrap: wrap;
         justify-content: center;
         margin-bottom: 0.25rem;
     }
 
     .tagline {
-        font-size: 0.95rem;
-        padding: 0 1rem;
+        font-size: 0.85rem;
+        padding: 0 0.5rem;
     }
 
     .app-nav {
         flex-wrap: wrap;
         justify-content: center;
-        gap: 0.5rem;
+        gap: 0.4rem;
         margin-top: 1rem;
         border-radius: 1rem;
+        padding: 0.5rem;
     }
 
     .nav-btn {
-        padding: 0.6rem 1rem;
-        font-size: 0.9rem;
-        flex: 1 1 calc(50% - 0.5rem);
+        padding: 0.6rem;
+        font-size: 0.85rem;
+        flex: 1 1 calc(50% - 0.4rem);
         justify-content: center;
+        text-align: center;
     }
 
     /* Backup Controls Strip */
@@ -1400,31 +1402,35 @@ main#hourLogView.active {
         margin-top: 1rem;
         width: 100%;
         background: rgba(0, 0, 0, 0.2);
-        padding: 0.75rem;
+        padding: 0.5rem;
         border-radius: 1rem;
         border: 1px solid var(--glass-border);
+        gap: 0.4rem !important;
     }
 
     .backup-controls .btn-utility {
         flex: 1 1 auto;
         justify-content: center;
-        font-size: 0.85rem;
+        font-size: 0.8rem !important;
         padding: 0.5rem !important;
+        border-radius: 1rem !important;
+        margin: 0;
     }
 
     .backup-controls .btn-utility span {
-        display: none;
-        /* Hide text on very small screens to save space */
+        display: inline-block;
+        /* Show text for clarity, it fits now that padding is reduced */
+        margin-left: 0.25rem;
     }
 
     /* Main Content Layouts */
     .main-content {
         grid-template-columns: 1fr;
-        gap: 1.5rem;
+        gap: 1rem;
     }
 
     .glass-panel {
-        padding: 1.25rem;
+        padding: 1rem;
         border-radius: 1rem;
     }
 
@@ -1440,39 +1446,46 @@ main#hourLogView.active {
 
     /* Table View adjustments */
     .table-header-section {
-        padding: 1.25rem 1.25rem 0.5rem 1.25rem;
+        padding: 1rem 1rem 0.5rem 1rem;
     }
 
     .table-header-section h2 {
-        font-size: 1.25rem;
+        font-size: 1.1rem;
     }
 
     .subject-tabs {
         flex-wrap: nowrap;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
-        padding-bottom: 0.25rem;
+        padding-bottom: 0.5rem;
         /* Space for scrollbar if visible */
+        gap: 0.5rem;
     }
 
     .sub-tab {
-        padding: 0.75rem 1rem;
-        font-size: 0.95rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
     }
 
     .table-container {
         padding-bottom: 0.5rem;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .revision-table {
-        min-width: 500px;
-        /* Force horizontal scroll rather than crushing */
+        min-width: 600px;
+        /* Force horizontal scroll rather than crushing header text */
     }
 
     .revision-table th,
     .revision-table td {
-        padding: 0.75rem 1rem;
-        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        /* Prevent chapter titles from wrapping into tall clumsy columns */
     }
 
     /* Time Tracker History Feed */
