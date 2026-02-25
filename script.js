@@ -1955,13 +1955,22 @@ Where X is a number from 1 to 10.`;
             // Remove the rating bracket from the visual text
             aiText = aiText.replace(/\[\[RATING:\s*\d+\/10\]\]/gi, '').trim();
 
-            // Save to history list
-            aiRatingsHistory.push({
-                timestamp: Date.now(),
-                dateLabel: new Date().toLocaleDateString(),
-                period: currentPeriod,
-                score: score
-            });
+            // Save to history list (Overwrite if exists for the same day and period)
+            const todayStr = new Date().toLocaleDateString();
+            const existingIndex = aiRatingsHistory.findIndex(r => r.dateLabel === todayStr && r.period === currentPeriod);
+
+            if (existingIndex !== -1) {
+                aiRatingsHistory[existingIndex].score = score;
+                aiRatingsHistory[existingIndex].timestamp = Date.now();
+            } else {
+                aiRatingsHistory.push({
+                    timestamp: Date.now(),
+                    dateLabel: todayStr,
+                    period: currentPeriod,
+                    score: score
+                });
+            }
+
             localStorage.setItem('aiRatingsHistory', JSON.stringify(aiRatingsHistory));
 
             // Trigger auto-backup so it syncs this new history
