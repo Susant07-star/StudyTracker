@@ -963,19 +963,37 @@ document.getElementById('importFile').addEventListener('change', importBackup);
 document.getElementById('btnDisconnectBackup').addEventListener('click', disconnectBackup);
 
 function exportBackup() {
-    // Study data backup only (insights have their own file unless specifically requested)
-    const dataStr = btoa(JSON.stringify({ studySessions, timeLogs, aiRatingsHistory }));
-    const dataBlob = new Blob([dataStr], { type: 'text/plain' });
-    const url = URL.createObjectURL(dataBlob);
+    // 1) Export Core Study Data
+    const studyDataStr = btoa(JSON.stringify({ studySessions, timeLogs }));
+    const studyBlob = new Blob([studyDataStr], { type: 'text/plain' });
+    const studyUrl = URL.createObjectURL(studyBlob);
 
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `StudyTracker_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
+    const a1 = document.createElement('a');
+    a1.href = studyUrl;
+    a1.download = `StudyTracker_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a1);
+    a1.click();
+    document.body.removeChild(a1);
+    URL.revokeObjectURL(studyUrl);
 
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // 2) Export AI Ratings Separately 
+    if (aiRatingsHistory && aiRatingsHistory.length > 0) {
+        const aiDataStr = btoa(JSON.stringify({ aiRatingsHistory }));
+        const aiBlob = new Blob([aiDataStr], { type: 'text/plain' });
+        const aiUrl = URL.createObjectURL(aiBlob);
+
+        const a2 = document.createElement('a');
+        a2.href = aiUrl;
+        a2.download = `StudyTracker_AIRatings_${new Date().toISOString().split('T')[0]}.json`;
+
+        // Slight delay to prevent some browsers from blocking the second download
+        setTimeout(() => {
+            document.body.appendChild(a2);
+            a2.click();
+            document.body.removeChild(a2);
+            URL.revokeObjectURL(aiUrl);
+        }, 300);
+    }
 }
 
 function importBackup(e) {
@@ -998,23 +1016,44 @@ function importBackup(e) {
                 importedData = JSON.parse(decodedStr);
             }
             if (Array.isArray(importedData)) {
-                studySessions = importedData;
-                saveToLocalStorage();
-                renderDashboard();
-                renderTableView();
-                alert('Backup successfully restored!');
-            } else if (importedData && typeof importedData === 'object' && ('studySessions' in importedData || 'timeLogs' in importedData)) {
-                if (importedData.studySessions) studySessions = importedData.studySessions;
-                if (importedData.timeLogs) timeLogs = importedData.timeLogs;
+                // Determine if it's the old study sessions array format
+                if (importedData.length > 0 && importedData[0].subject) {
+                    studySessions = importedData;
+                    saveToLocalStorage();
+                    renderDashboard();
+                    renderTableView();
+                    alert('Study Sessions Backup successfully restored!');
+                } else if (importedData.length > 0 && importedData[0].score !== undefined) {
+                    // Top-level array of history ratings
+                    aiRatingsHistory = importedData;
+                    localStorage.setItem('aiRatingsHistory', JSON.stringify(aiRatingsHistory));
+                    alert('AI Ratings Backup successfully restored!');
+                }
+            } else if (importedData && typeof importedData === 'object') {
+                let restoredSomething = false;
+
+                if (importedData.studySessions || importedData.timeLogs) {
+                    if (importedData.studySessions) studySessions = importedData.studySessions;
+                    if (importedData.timeLogs) timeLogs = importedData.timeLogs;
+                    saveToLocalStorage();
+                    renderDashboard();
+                    renderTableView();
+                    renderTimeLogs();
+                    restoredSomething = true;
+                }
+
                 if (importedData.aiRatingsHistory) {
                     aiRatingsHistory = importedData.aiRatingsHistory;
                     localStorage.setItem('aiRatingsHistory', JSON.stringify(aiRatingsHistory));
+                    if (!restoredSomething) alert('AI Ratings Backup successfully restored!');
+                    restoredSomething = true;
                 }
-                saveToLocalStorage();
-                renderDashboard();
-                renderTableView();
-                renderTimeLogs();
-                alert('Backup successfully restored!');
+
+                if (restoredSomething && (importedData.studySessions || importedData.timeLogs)) {
+                    alert('Backup successfully restored!');
+                } else if (!restoredSomething) {
+                    alert('No valid data found in backup.');
+                }
             } else {
                 alert('Invalid backup format.');
             }
@@ -1128,10 +1167,19 @@ async function autoBackupSync() {
             console.warn('Auto-backup skipped: permission not granted (will retry next interaction)');
             return;
         }
-        const fileHandle = await backupDirHandle.getFileHandle('StudyTracker_AutoBackup.backup', { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(btoa(JSON.stringify({ studySessions, timeLogs, aiRatingsHistory })));
-        await writable.close();
+        // 1) Auto-backup Core Study Data
+        const studyHandle = await backupDirHandle.getFileHandle('StudyTracker_AutoBackup.backup', { create: true });
+        const studyWritable = await studyHandle.createWritable();
+        await studyWritable.write(btoa(JSON.stringify({ studySessions, timeLogs })));
+        await studyWritable.close();
+
+        // 2) Auto-backup AI Ratings Separately
+        if (aiRatingsHistory && aiRatingsHistory.length > 0) {
+            const aiHandle = await backupDirHandle.getFileHandle('StudyTracker_AIRatings.backup', { create: true });
+            const aiWritable = await aiHandle.createWritable();
+            await aiWritable.write(btoa(JSON.stringify({ aiRatingsHistory })));
+            await aiWritable.close();
+        }
     } catch (error) {
         console.error("Auto-Backup save failed:", error);
         // NEVER clear backupDirHandle here — keep it for future recovery attempts
