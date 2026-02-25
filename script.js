@@ -2098,6 +2098,7 @@ Where X is a number from 1 to 10.`;
 
             // Render on UI
             renderStarRating(score);
+            renderAIRatingChart();
         } else {
             document.getElementById('aiRatingContainer').style.display = 'none';
         }
