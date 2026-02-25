@@ -69,6 +69,33 @@
 
         <!-- Dashboard View -->
         <main id="dashboardView" class="main-content view-section active">
+            <!-- Exam Countdown Headers -->
+            <div class="exam-countdown-container" style="grid-column: 1 / -1; margin-bottom: 1.5rem;">
+                <div class="glass-panel countdown-panel"
+                    style="display: flex; justify-content: space-around; align-items: center; padding: 1.5rem; background: linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(245, 158, 11, 0.05)); border-color: rgba(245, 158, 11, 0.3);">
+                    <div class="countdown-item" style="text-align: center;">
+                        <span class="countdown-label"
+                            style="display: block; font-size: 0.9rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Pre-Board
+                            Exam in</span>
+                        <span id="preBoardCountdown" class="countdown-days"
+                            style="display: block; font-size: 2.5rem; font-weight: 800; color: #f59e0b; text-shadow: 0 0 15px rgba(245, 158, 11, 0.4);">--</span>
+                        <span class="countdown-unit"
+                            style="font-size: 0.9rem; color: #f59e0b; font-weight: 600;">DAYS</span>
+                    </div>
+                    <div class="countdown-divider" style="width: 1px; height: 50px; background: rgba(255,255,255,0.1);">
+                    </div>
+                    <div class="countdown-item" style="text-align: center;">
+                        <span class="countdown-label"
+                            style="display: block; font-size: 0.9rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Final
+                            Board Exam in</span>
+                        <span id="boardCountdown" class="countdown-days"
+                            style="display: block; font-size: 2.5rem; font-weight: 800; color: #f59e0b; text-shadow: 0 0 15px rgba(245, 158, 11, 0.4);">--</span>
+                        <span class="countdown-unit"
+                            style="font-size: 0.9rem; color: #f59e0b; font-weight: 600;">DAYS</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Top Dashboard Widgets (AI Insight & Timer) -->
             <div class="dashboard-header-widgets"
                 style="grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">

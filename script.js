@@ -364,6 +364,60 @@ async function recoverDataIfNeeded() {
     return false;
 }
 
+// ==========================================
+// EXAM COUNTDOWN LOGIC
+// ==========================================
+const EXAM_DATES = {
+    preBoard: '2026-03-20',
+    board: '2026-04-27'
+};
+
+function updateExamCountdowns() {
+    const preBoardEl = document.getElementById('preBoardCountdown');
+    const boardEl = document.getElementById('boardCountdown');
+
+    if (!preBoardEl || !boardEl) return;
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const calculateDaysRemaining = (examDateStr) => {
+        const examDate = new Date(examDateStr);
+        examDate.setHours(0, 0, 0, 0);
+        const diffTime = examDate.getTime() - now.getTime();
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    };
+
+    const daysToPreBoard = calculateDaysRemaining(EXAM_DATES.preBoard);
+    const daysToBoard = calculateDaysRemaining(EXAM_DATES.board);
+
+    // Update Display for Pre-Board
+    if (daysToPreBoard > 0) {
+        preBoardEl.textContent = daysToPreBoard;
+        if (daysToPreBoard <= 7) preBoardEl.style.color = '#ef4444'; // Red alert when close
+    } else if (daysToPreBoard === 0) {
+        preBoardEl.textContent = 'TODAY';
+        preBoardEl.style.color = '#ef4444';
+        preBoardEl.style.fontSize = '2rem';
+    } else {
+        preBoardEl.textContent = 'DONE';
+        preBoardEl.style.opacity = '0.5';
+    }
+
+    // Update Display for Board
+    if (daysToBoard > 0) {
+        boardEl.textContent = daysToBoard;
+        if (daysToBoard <= 14) boardEl.style.color = '#ef4444'; // Red alert when close
+    } else if (daysToBoard === 0) {
+        boardEl.textContent = 'TODAY';
+        boardEl.style.color = '#ef4444';
+        boardEl.style.fontSize = '2rem';
+    } else {
+        boardEl.textContent = 'DONE';
+        boardEl.style.opacity = '0.5';
+    }
+}
+
 // Initialize App
 async function init() {
     // CRITICAL: Restore backup handle FIRST so recovery can use it
@@ -386,8 +440,9 @@ async function init() {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     currentDateDisplay.textContent = new Date().toLocaleDateString('en-US', options);
 
-    // Start 1-minute interval to refresh UI (specifically for 5-min delete window)
+    // Start 1-minute interval to refresh UI (specifically for 5-min delete window & exam countdown)
     setInterval(() => {
+        updateExamCountdowns();
         if (document.getElementById('dashboardView').classList.contains('active')) {
             renderAllTopics();
         } else if (document.getElementById('hourLogView').classList.contains('active')) {
@@ -405,6 +460,7 @@ async function init() {
     renderTimeLogs();
 
     // Feature initializations
+    updateExamCountdowns();
     if (typeof renderDailyInsight === 'function') renderDailyInsight();
     if (typeof calculateAndRenderStreak === 'function') calculateAndRenderStreak();
 
@@ -1984,6 +2040,10 @@ When analyzing, ALWAYS separate academic study hours from personal interest hour
 - Total hours: ${totalHours.toFixed(1)}h | Activities: ${logs.length} | Active days: ${Object.keys(dailyBreakdown).length}
 - Revision completion: ${revDone}/${revTotal}
 
+## UPCOMING EXAMS (CRITICAL)
+- Pre-Board Exam: March 20, 2026 (${Math.ceil((new Date('2026-03-20') - new Date().setHours(0, 0, 0, 0)) / 86400000)} days left)
+- Final Board Exam: April 27, 2026 (${Math.ceil((new Date('2026-04-27') - new Date().setHours(0, 0, 0, 0)) / 86400000)} days left)
+
 ## DETAILED ACTIVITY LOG (read each one carefully):
 ${rawLogData}
 
@@ -1995,21 +2055,26 @@ ${sessionsContext || 'None yet'}
 
 ## YOUR TASK
 
-Read each activity above carefully. Understand:
-- What SUBJECT each activity actually belongs to ("Math - Parabola" = Maths, "App development" = Personal Interest, "Physics paper" = Physics)
-- Separate ACADEMIC hours (graded subjects) from PERSONAL INTEREST hours (side projects)
-- Which activities were PRODUCTIVE vs UNPRODUCTIVE ("wasted time", "not able to concentrate")
-- The student's day flow: when they started, breaks, transitions between subjects
+Read each activity above carefully. Analyze the student's productivity, consistency, and alignment with their academic goals.
 
 Now analyze:
 1. ACADEMIC vs NON-ACADEMIC split: How many hours went to actual graded subjects vs personal projects? Be blunt.
 2. Subject-wise breakdown of ACADEMIC hours only: Which subjects got time? Which are dangerously neglected?
-3. Productive vs unproductive hours: call out specific wasted time slots
+3. Productive vs unproductive hours: call out specific wasted time slots.
 4. Schedule analysis: Are they using their best morning hours for hard subjects or wasting them?
 5. Revision discipline: Are they doing their 2-4-7 reviews? This is critical for retention.
 6. Personal interests assessment: Are side projects eating into study time? Should they be scheduled differently?
 
-End with a concrete, specific action plan for tomorrow with exact time blocks.
+## THE "NEXT DAY" ACTION PLAN (CRITICAL)
+End your response with a section titled "--- MEANINGFUL ACTION PLAN FOR TOMORROW ---". 
+This section must be a concrete, time-blocked schedule. Requirements:
+- Prioritize subjects with the closest exams first (refer to Upcoming Exams).
+- Include specific chapters or topics mentioned in their "Ongoing Revisions" or "Study Sessions".
+- Allocate specific time blocks (e.g., "06:00 - 08:00: Physics - Optics").
+- Include scheduled breaks.
+- Ensure the plan is realistic but challenging.
+- Provide a "Mentor's Note" at the bottom of the plan with one specific piece of advice to improve focus based on today's wasted time.
+
 Be brutally honest. Reference specific activities by name and time. This student wants REAL coaching, not encouragement.
 
 CRITICAL FINAL INSTRUCTION:

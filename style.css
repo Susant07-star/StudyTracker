@@ -1635,3 +1635,33 @@ main#hourLogView.active {
         font-size: 2.5rem;
     }
 }
+
+/* Exam Countdown Custom Styles */
+.exam-countdown-container {
+    animation: fadeIn 0.8s ease-out;
+}
+
+.countdown-panel {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.countdown-panel:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(245, 158, 11, 0.15);
+}
+
+@media (max-width: 768px) {
+    .countdown-panel {
+        flex-direction: column !important;
+        gap: 1.5rem !important;
+        padding: 2rem 1rem !important;
+    }
+
+    .countdown-divider {
+        display: none !important;
+    }
+
+    .countdown-days {
+        font-size: 2rem !important;
+    }
+}
