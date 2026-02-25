@@ -24,7 +24,9 @@
                 <i class="fa-solid fa-brain"></i>
                 <h1>StudyTracker</h1>
             </div>
-            <p class="tagline">Master your memory with the 2-4-7 Revision Method</p>
+            <p class="tagline">Master your memory with the 2-4-7 Revision Method <span id="streakBadge"
+                    class="streak-badge" style="display:none;"><i class="fa-solid fa-fire"></i> <span
+                        id="streakCount">0</span> Day Streak</span></p>
 
             <div class="app-nav">
                 <button type="button" class="nav-btn active" data-view="dashboardView"><i
@@ -67,6 +69,46 @@
 
         <!-- Dashboard View -->
         <main id="dashboardView" class="main-content view-section active">
+            <!-- Top Dashboard Widgets (AI Insight & Timer) -->
+            <div class="dashboard-header-widgets"
+                style="grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+                <!-- Daily Psychology Insight -->
+                <div class="glass-panel"
+                    style="border-color: rgba(236, 72, 153, 0.3); background: linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(236, 72, 153, 0.05)); display: flex; flex-direction: column; justify-content: center;">
+                    <h3
+                        style="margin-bottom: 0.75rem; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; color: #fbcfe8;">
+                        <i class="fa-solid fa-brain"></i> <span
+                            style="background: linear-gradient(to right, #6366f1, #ec4899); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">AI
+                            Psychology Insight</span>
+                    </h3>
+                    <p id="dailyInsightText"
+                        style="font-size: 1.05rem; color: var(--text-primary); line-height: 1.6; font-style: italic;">
+                        "Loading insight..."</p>
+                </div>
+
+                <!-- 5-Minute Timer Widget -->
+                <div class="glass-panel" style="text-align: center; border-color: rgba(16, 185, 129, 0.3);">
+                    <h3
+                        style="margin-bottom: 0.5rem; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: #34d399;">
+                        <i class="fa-solid fa-stopwatch"></i> The '5-Minute' Anti-Procrastination Rule
+                    </h3>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.4;">
+                        Commit to just 5 minutes. The Zeigarnik effect forces your brain to finish what it starts.
+                    </p>
+                    <div id="countdownDisplay"
+                        style="font-size: 3rem; font-weight: 700; margin-bottom: 1rem; font-variant-numeric: tabular-nums;">
+                        05:00</div>
+                    <div style="display: flex; gap: 0.5rem; justify-content: center;">
+                        <button id="btnStartTimer" class="btn-primary"
+                            style="width: auto; padding: 0.6rem 1.5rem; background: var(--color-computer);"><i
+                                class="fa-solid fa-play"></i> Start</button>
+                        <button id="btnResetTimer" class="btn-utility"
+                            style="width: auto; padding: 0.6rem 1rem; border-radius: 0.75rem;"><i
+                                class="fa-solid fa-rotate-right"></i> Reset</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Left Column: Add New Study Session Form -->
             <section class="add-session-section glass-panel">
                 <h2><i class="fa-solid fa-plus-circle"></i> Log New Session</h2>

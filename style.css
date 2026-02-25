@@ -120,6 +120,30 @@ body::after {
 .tagline {
     color: var(--text-secondary);
     font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.streak-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(239, 68, 68, 0.2));
+    border: 1px solid rgba(249, 115, 22, 0.4);
+    color: #fdba74;
+    padding: 0.3rem 0.8rem;
+    border-radius: 2rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-left: 0.75rem;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15);
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+.streak-badge i {
+    color: #f97316;
 }
 
 /* Main Layout */
@@ -129,7 +153,7 @@ body::after {
     gap: 2rem;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
     .main-content {
         grid-template-columns: 1fr;
     }
@@ -513,6 +537,8 @@ option {
 /* App Navigation */
 .app-nav {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 1rem;
     margin-top: 1.5rem;
     background: rgba(0, 0, 0, 0.2);
@@ -550,6 +576,7 @@ option {
 /* Backup Controls */
 .backup-controls {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
     margin-top: 1rem;
 }

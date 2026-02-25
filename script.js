@@ -23,6 +23,15 @@ if (studySessions.length > 0 || timeLogs.length > 0) {
 let currentFilter = 'all';
 let currentTableSubject = 'Physics';
 
+// Fast timeout wrapper to prevent hanging file system operations
+function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('TIMEOUT')), ms);
+        promise.then(value => { clearTimeout(timer); resolve(value); })
+            .catch(err => { clearTimeout(timer); reject(err); });
+    });
+}
+
 // Auto Backup State
 let backupDirHandle = null;
 let timeLogBackupFolderHandle = null;
@@ -266,6 +275,8 @@ function renderTimeLogs() {
     });
 
     totalHoursTodayEl.textContent = dailyTotal.toFixed(1);
+
+    if (typeof calculateAndRenderStreak === 'function') calculateAndRenderStreak();
 }
 
 // View & Table DOM
@@ -348,38 +359,8 @@ async function recoverDataIfNeeded() {
         console.warn('IndexedDB recovery failed:', e);
     }
 
-    // LAYER 2: Try auto-backup file from linked folder
-    try {
-        if (backupDirHandle) {
-            // Try to get permission silently
-            const hasPermission = await verifyPermission(backupDirHandle, false);
-            if (hasPermission) {
-                const fileHandle = await backupDirHandle.getFileHandle('StudyTracker_AutoBackup.backup');
-                const file = await fileHandle.getFile();
-                const content = await file.text();
-                let decoded;
-                if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
-                    decoded = JSON.parse(content);
-                } else {
-                    decoded = JSON.parse(atob(content));
-                }
-                if (decoded.studySessions || decoded.timeLogs) {
-                    studySessions = decoded.studySessions || [];
-                    timeLogs = decoded.timeLogs || [];
-                    localStorage.setItem('studySessions', JSON.stringify(studySessions));
-                    localStorage.setItem('timeLogs', JSON.stringify(timeLogs));
-                    // Also re-seed IndexedDB
-                    idb.set('studySessions', studySessions).catch(() => { });
-                    idb.set('timeLogs', timeLogs).catch(() => { });
-                    console.log('✅ Data recovered from auto-backup file');
-                    return 'backup-file';
-                }
-            }
-        }
-    } catch (e) {
-        console.warn('Auto-backup file recovery failed:', e);
-    }
-
+    // LAYER 2: We no longer try to recover from backup file on load to prevent Chrome freezing
+    // (We rely exclusively on IndexedDB mirror which was initialized above)
     return false;
 }
 
@@ -388,8 +369,9 @@ async function init() {
     // CRITICAL: Restore backup handle FIRST so recovery can use it
     await restoreAutoBackupSettings();
 
-    // Run data recovery before anything else renders
+    // Run data recovery before anything else renders 
     const recovered = await recoverDataIfNeeded();
+
     if (recovered === 'indexeddb') {
         showToast('Data recovered automatically from backup! 🔄', 'success');
     } else if (recovered === 'backup-file') {
@@ -421,6 +403,10 @@ async function init() {
     renderDashboard();
     renderTableView();
     renderTimeLogs();
+
+    // Feature initializations
+    if (typeof renderDailyInsight === 'function') renderDailyInsight();
+    if (typeof calculateAndRenderStreak === 'function') calculateAndRenderStreak();
 
     // Event Listeners
     addSessionForm.addEventListener('submit', handleAddSession);
@@ -684,6 +670,7 @@ function getRevisionsDueToday() {
 function renderDashboard() {
     renderTodayRevisions();
     renderAllTopics();
+    if (typeof calculateAndRenderStreak === 'function') calculateAndRenderStreak();
 }
 
 // Fired when user clicks 'Mark Completed' on a revision card
@@ -1083,40 +1070,29 @@ async function restoreAutoBackupSettings() {
         if (!storedHandle) return;
 
         // ALWAYS keep the handle reference even if permission isn't granted yet.
-        // This ensures the folder NEVER "unlinks" — we just need to re-request
-        // permission when the user interacts with the page.
         backupDirHandle = storedHandle;
 
-        // Try to verify readwrite permission (not just read)
-        const hasPermission = await verifyPermission(storedHandle, true);
-        if (hasPermission) {
-            updateBackupUIVisually();
-        } else {
-            // Permission not granted yet (browser requires user gesture).
-            // Show "reconnect" state — clicking will re-request permission.
-            const btn = document.getElementById('btnAutoBackup');
-            btn.innerHTML = '<i class="fa-solid fa-folder-open"></i> <span>Reconnect Folder</span>';
-            btn.style.background = 'rgba(245, 158, 11, 0.2)';
-            btn.style.color = '#fbbf24';
-            btn.style.borderColor = 'rgba(245, 158, 11, 0.4)';
-            document.getElementById('btnDisconnectBackup').style.display = 'flex';
-        }
+        // CRITICAL BUG FIX: We DO NOT verify readwrite permission on initialization.
+        // Chrome's File System Access API `queryPermission` can hang the entire browser UI thread 
+        // for 10-30 seconds if the folder is on a disconnected network drive or USB.
+        // Instead, we immediately put it in "Reconnect" state, so it only queries when the user clicks.
+        const btn = document.getElementById('btnAutoBackup');
+        btn.innerHTML = '<i class="fa-solid fa-folder-open"></i> <span>Reconnect Folder</span>';
+        btn.style.background = 'rgba(245, 158, 11, 0.2)';
+        btn.style.color = '#fbbf24';
+        btn.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+        document.getElementById('btnDisconnectBackup').style.display = 'flex';
     } catch (e) {
         console.warn("Could not restore backup handle from IDB", e);
-        // Even on error, try to keep the handle if we have it
-        try {
-            const storedHandle = await idb.get('autoBackupFolderHandle');
-            if (storedHandle) backupDirHandle = storedHandle;
-        } catch (_) { }
     }
 }
 
-async function verifyPermission(fileHandle, readWrite) {
+async function verifyPermission(fileHandle, readWrite, withRequest = false) {
     try {
         const options = {};
         if (readWrite) options.mode = 'readwrite';
         if ((await fileHandle.queryPermission(options)) === 'granted') return true;
-        if ((await fileHandle.requestPermission(options)) === 'granted') return true;
+        if (withRequest && (await fileHandle.requestPermission(options)) === 'granted') return true;
         return false;
     } catch (e) {
         console.warn('Permission check failed:', e);
@@ -1134,7 +1110,7 @@ async function setupAutoBackup() {
         // If we already have a stored handle, try to re-grant permission
         // instead of picking a new folder (prevents accidental unlinking)
         if (backupDirHandle) {
-            const hasPermission = await verifyPermission(backupDirHandle, true);
+            const hasPermission = await verifyPermission(backupDirHandle, true, true);
             if (hasPermission) {
                 updateBackupUIVisually();
                 await autoBackupSync();
@@ -1160,7 +1136,7 @@ async function setupAutoBackup() {
 async function autoBackupSync() {
     if (!backupDirHandle) return;
     try {
-        const hasPermission = await verifyPermission(backupDirHandle, true);
+        const hasPermission = await verifyPermission(backupDirHandle, true, false);
         if (!hasPermission) {
             // Don't clear the handle! Just skip this sync silently.
             // The handle stays in IDB for next session's recovery.
@@ -2243,3 +2219,187 @@ function renderStarRating(score) {
 
 // Bootstrap Application
 init();
+
+// ==========================================
+// PSYCHOLOGY & MOTIVATION FEATURES
+// ==========================================
+
+const psychologyInsights = [
+    "<strong>Active Recall:</strong> Re-reading is the least effective study method. Close the book and test yourself. The struggle to remember physically builds neural pathways.",
+    "<strong>The Zeigarnik Effect:</strong> Your brain hates unfinished tasks. Just start for 5 minutes, and you'll likely feel compelled to finish.",
+    "<strong>Spaced Repetition:</strong> Forgetting is a feature, not a bug. Reviewing material right before you forget it (2-4-7 method) cements it forever.",
+    "<strong>Ultradian Rhythms:</strong> Multitasking is a myth. Work in 90-minute blocks of deep focus, then take a 20-minute break with no screens.",
+    "<strong>Dopamine Prediction:</strong> Break your tasks into micro-goals. Checking off small boxes gives you the dopamine needed to keep studying.",
+    "<strong>Sleep Consolidation:</strong> You gather info when studying, but you physically wire it into long-term memory while you sleep. Never cram at the expense of sleep."
+];
+
+async function renderDailyInsight() {
+    const insightEl = document.getElementById('dailyInsightText');
+    if (!insightEl) return;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const storedInsight = JSON.parse(localStorage.getItem('dailyAiInsight') || 'null');
+
+    // Check if we hit the cache
+    if (storedInsight && storedInsight.date === todayStr) {
+        insightEl.innerHTML = storedInsight.text;
+        return;
+    }
+
+    const apiKey = localStorage.getItem('groqApiKey');
+    if (apiKey) {
+        insightEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating personalized insight...';
+        try {
+            const prompt = "You are a neuroscience and behavioral psychology coach. Give the user a one-sentence, powerful psychological insight about studying, motivation, or learning. Emphasize concepts like active recall, spaced repetition, or dopamine. Don't respond with anything else (no greetings, no quotes marks if not needed). Use <strong> HTML tags to emphasize the core concept.";
+
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: 'llama3-70b-8192',
+                    messages: [{ role: 'system', content: prompt }],
+                    temperature: 0.7, // Some variety but logically sound
+                    max_tokens: 100
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                let generatedText = data.choices[0].message.content.trim();
+                // Strip leading/trailing quotes if the model adds them weirdly
+                if (generatedText.startsWith('"') && generatedText.endsWith('"')) {
+                    generatedText = generatedText.slice(1, -1);
+                }
+
+                if (generatedText) {
+                    insightEl.innerHTML = generatedText;
+                    localStorage.setItem('dailyAiInsight', JSON.stringify({ date: todayStr, text: generatedText }));
+                    return;
+                }
+            } else {
+                console.warn("API Error:", await response.text());
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    // Fallback logic
+    const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+    const insightIndex = dayOfYear % psychologyInsights.length;
+    insightEl.innerHTML = psychologyInsights[insightIndex];
+}
+
+function calculateAndRenderStreak() {
+    const uniqueDates = new Set();
+
+    studySessions.forEach(s => {
+        if (s.createdAt) uniqueDates.add(s.createdAt.split('T')[0]);
+    });
+    timeLogs.forEach(t => {
+        if (t.date) uniqueDates.add(t.date);
+        if (t.createdAt) uniqueDates.add(t.createdAt.split('T')[0]);
+    });
+
+    const sortedDates = Array.from(uniqueDates).sort((a, b) => new Date(b) - new Date(a));
+
+    let currentStreak = 0;
+
+    // Use strictly formatted strings for consistent local timezone comparison
+    const formatDate = (dateObj) => {
+        return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+    };
+
+    let checkDate = new Date();
+    const todayStr = formatDate(checkDate);
+    checkDate.setDate(checkDate.getDate() - 1);
+    const yesterdayStr = formatDate(checkDate);
+
+    // If streak active today or yesterday
+    if (!sortedDates.includes(todayStr) && !sortedDates.includes(yesterdayStr)) {
+        currentStreak = 0;
+    } else {
+        // Count backwards
+        let checkingDate = new Date();
+        if (!sortedDates.includes(todayStr)) {
+            checkingDate.setDate(checkingDate.getDate() - 1);
+        }
+
+        while (true) {
+            const dateStr = formatDate(checkingDate);
+            if (sortedDates.includes(dateStr)) {
+                currentStreak++;
+                checkingDate.setDate(checkingDate.getDate() - 1);
+            } else {
+                break;
+            }
+        }
+    }
+
+    const badge = document.getElementById('streakBadge');
+    if (badge) {
+        if (currentStreak > 0) {
+            document.getElementById('streakCount').textContent = currentStreak;
+            badge.style.display = 'inline-flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+// 5-Minute Start Timer Logic
+let timerInterval;
+let timerSeconds = 300; // 5 mins
+
+const countdownDisplay = document.getElementById('countdownDisplay');
+const btnStartTimer = document.getElementById('btnStartTimer');
+const btnResetTimer = document.getElementById('btnResetTimer');
+
+function updateTimerDisplay() {
+    if (!countdownDisplay) return;
+    const m = Math.floor(timerSeconds / 60).toString().padStart(2, '0');
+    const s = (timerSeconds % 60).toString().padStart(2, '0');
+    countdownDisplay.textContent = `${m}:${s}`;
+}
+
+if (btnStartTimer && btnResetTimer) {
+    btnStartTimer.addEventListener('click', () => {
+        if (btnStartTimer.textContent.includes('Start') || btnStartTimer.textContent.includes('Resume')) {
+            // Start/Resume
+            btnStartTimer.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+            btnStartTimer.style.background = '#f59e0b'; // Amber
+
+            timerInterval = setInterval(() => {
+                timerSeconds--;
+                if (timerSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    timerSeconds = 0;
+                    updateTimerDisplay();
+                    btnStartTimer.innerHTML = '<i class="fa-solid fa-check"></i> Done!';
+                    btnStartTimer.style.background = '#10b981'; // Emerald
+                    btnStartTimer.disabled = true;
+                    showToast("5 minutes complete! You've broken the friction. Keep going!", "success");
+                } else {
+                    updateTimerDisplay();
+                }
+            }, 1000);
+        } else if (btnStartTimer.textContent.includes('Pause')) {
+            // Pause
+            clearInterval(timerInterval);
+            btnStartTimer.innerHTML = '<i class="fa-solid fa-play"></i> Resume';
+            btnStartTimer.style.background = 'var(--color-computer)';
+        }
+    });
+
+    btnResetTimer.addEventListener('click', () => {
+        clearInterval(timerInterval);
+        timerSeconds = 300;
+        updateTimerDisplay();
+        btnStartTimer.innerHTML = '<i class="fa-solid fa-play"></i> Start';
+        btnStartTimer.style.background = 'var(--color-computer)';
+        btnStartTimer.disabled = false;
+    });
+}
