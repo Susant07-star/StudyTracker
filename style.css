@@ -1407,20 +1407,33 @@ main#hourLogView.active {
     }
 
     .app-nav {
+        display: flex;
         flex-wrap: wrap;
-        justify-content: center;
-        gap: 0.4rem;
-        margin-top: 1rem;
-        border-radius: 1rem;
+        gap: 0.5rem;
         padding: 0.5rem;
     }
 
     .nav-btn {
-        padding: 0.6rem;
+        padding: 0.75rem 0.5rem;
         font-size: 0.85rem;
-        flex: 1 1 calc(50% - 0.4rem);
         justify-content: center;
         text-align: center;
+        border-radius: 0.75rem;
+    }
+
+    /* Fixed Row Layout:
+       Row 1: Dashboard (50%) | Log Table (50%)
+       Row 2: Time Tracker (100%)
+       Row 3: AI Insights (100%)
+    */
+    .nav-btn[data-view="dashboardView"],
+    .nav-btn[data-view="tableView"] {
+        flex: 1 1 calc(50% - 0.25rem);
+    }
+
+    .nav-btn[data-view="hourLogView"],
+    .nav-btn[data-view="insightsView"] {
+        flex: 1 1 100%;
     }
 
     /* Backup Controls Strip */
@@ -1497,9 +1510,9 @@ main#hourLogView.active {
 
     /* Transform Log Table into Cards for Mobile */
     .table-container {
-        padding-bottom: 0.5rem;
+        padding: 0;
         width: 100%;
-        overflow-x: visible;
+        overflow: visible;
     }
 
     .revision-table,
@@ -1511,32 +1524,38 @@ main#hourLogView.active {
         display: block;
     }
 
-    .revision-table thead tr {
+    .revision-table thead {
         display: none;
     }
 
     .revision-table tbody tr {
+        display: grid !important;
+        grid-template-areas:
+            "topic topic topic"
+            "date date date"
+            "rev2 rev4 rev7";
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 0.25rem;
         border: 1px solid var(--glass-border);
-        border-radius: 1rem;
+        border-radius: 0.85rem;
         margin-bottom: 0.75rem;
-        background: linear-gradient(145deg, rgba(30, 41, 59, 0.5), rgba(255, 255, 255, 0.02));
-        padding: 0.75rem;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        background: linear-gradient(145deg, rgba(30, 41, 59, 0.6), rgba(255, 255, 255, 0.03));
+        padding: 0.85rem;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     }
 
     .revision-table td {
+        display: block !important;
+        width: auto !important;
         border: none !important;
         padding: 0 !important;
-        text-align: left !important;
-        display: block !important;
-        width: 100% !important;
         box-sizing: border-box;
     }
 
-    /* Topic name — bold title */
     .revision-table td[data-label="Chapter / Topic"] {
-        font-size: 1rem !important;
-        font-weight: 600 !important;
+        grid-area: topic;
+        font-size: 1.05rem !important;
+        font-weight: 700 !important;
         color: var(--text-primary);
         margin-bottom: 0.2rem;
         white-space: nowrap;
@@ -1544,36 +1563,43 @@ main#hourLogView.active {
         text-overflow: ellipsis;
     }
 
-    /* Date — subtitle style */
     .revision-table td[data-label="Date Read"] {
+        grid-area: date;
         font-size: 0.8rem !important;
         color: var(--text-secondary);
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.75rem;
         padding-bottom: 0.5rem !important;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
     }
 
-    /* Revision status cells — force into a single row */
+    .revision-table td[data-label="2-Day Rev"] {
+        grid-area: rev2;
+    }
+
+    .revision-table td[data-label="4-Day Rev"] {
+        grid-area: rev4;
+    }
+
+    .revision-table td[data-label="7-Day Rev"] {
+        grid-area: rev7;
+    }
+
     .revision-table td.center-col {
-        display: inline-block !important;
-        width: 33.33% !important;
         text-align: center !important;
-        vertical-align: top;
-        margin: 0 !important;
-        padding: 0.25rem 0 !important;
-        box-sizing: border-box;
+        padding: 0.1rem 0 !important;
     }
 
-    /* Hide pseudo labels for topic/date, show for revision cols */
+    /* Professional mobile labels */
     .revision-table td::before {
         content: attr(data-label);
         display: block;
-        font-size: 0.6rem;
-        font-weight: 600;
+        font-size: 0.55rem;
+        font-weight: 700;
         color: var(--text-secondary);
         text-transform: uppercase;
-        letter-spacing: 0.3px;
-        margin-bottom: 0.2rem;
+        letter-spacing: 0.4px;
+        margin-bottom: 0.25rem;
+        opacity: 0.7;
     }
 
     .revision-table td[data-label="Chapter / Topic"]::before,
@@ -1582,10 +1608,24 @@ main#hourLogView.active {
     }
 
     .status-cell-wrapper {
+        display: flex !important;
         flex-direction: column !important;
-        gap: 0.1rem !important;
         align-items: center !important;
+        gap: 0.1rem !important;
     }
+
+    .status-cell {
+        width: 28px !important;
+        height: 28px !important;
+        font-size: 0.75rem !important;
+    }
+
+    .status-date {
+        font-size: 0.6rem !important;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
 
     .status-cell {
         width: 26px !important;
