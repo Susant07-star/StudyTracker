@@ -1500,7 +1500,6 @@ main#hourLogView.active {
         padding-bottom: 0.5rem;
         width: 100%;
         overflow-x: visible;
-        /* Remove horizontal scroll */
     }
 
     .revision-table,
@@ -1512,53 +1511,93 @@ main#hourLogView.active {
         display: block;
     }
 
-    /* Hide table headers completely visually */
     .revision-table thead tr {
         display: none;
     }
 
-    .revision-table tr {
+    .revision-table tbody tr {
         border: 1px solid var(--glass-border);
         border-radius: 1rem;
-        margin-bottom: 1rem;
-        background: rgba(0, 0, 0, 0.15);
-        padding: 0.5rem 0;
+        margin-bottom: 0.75rem;
+        background: linear-gradient(145deg, rgba(30, 41, 59, 0.5), rgba(255, 255, 255, 0.02));
+        padding: 0.75rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
 
     .revision-table td {
-        /* Behave like a "row" inside the card */
-        border: none;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        position: relative;
-        padding: 0.75rem 1rem 0.75rem 45% !important;
-        white-space: normal;
-        text-align: right !important;
-        min-height: 2.5rem;
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        font-size: 0.9rem !important;
+        border: none !important;
+        padding: 0 !important;
+        text-align: left !important;
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box;
     }
 
-    .revision-table td:last-child {
-        border-bottom: 0;
+    /* Topic name — bold title */
+    .revision-table td[data-label="Chapter / Topic"] {
+        font-size: 1rem !important;
+        font-weight: 600 !important;
+        color: var(--text-primary);
+        margin-bottom: 0.2rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
-    /* Formats the pseudo-element label injected by JavaScript */
+    /* Date — subtitle style */
+    .revision-table td[data-label="Date Read"] {
+        font-size: 0.8rem !important;
+        color: var(--text-secondary);
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.5rem !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    }
+
+    /* Revision status cells — force into a single row */
+    .revision-table td.center-col {
+        display: inline-block !important;
+        width: 33.33% !important;
+        text-align: center !important;
+        vertical-align: top;
+        margin: 0 !important;
+        padding: 0.25rem 0 !important;
+        box-sizing: border-box;
+    }
+
+    /* Hide pseudo labels for topic/date, show for revision cols */
     .revision-table td::before {
         content: attr(data-label);
-        position: absolute;
-        left: 1rem;
-        width: 40%;
-        padding-right: 10px;
-        white-space: nowrap;
-        text-align: left;
+        display: block;
+        font-size: 0.6rem;
         font-weight: 600;
         color: var(--text-secondary);
-        font-size: 0.75rem;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.3px;
+        margin-bottom: 0.2rem;
     }
+
+    .revision-table td[data-label="Chapter / Topic"]::before,
+    .revision-table td[data-label="Date Read"]::before {
+        display: none;
+    }
+
+    .status-cell-wrapper {
+        flex-direction: column !important;
+        gap: 0.1rem !important;
+        align-items: center !important;
+    }
+
+    .status-cell {
+        width: 26px !important;
+        height: 26px !important;
+        font-size: 0.7rem !important;
+    }
+
+    .status-date {
+        font-size: 0.55rem !important;
+        white-space: nowrap;
+    }
+
 
     /* Time Tracker History Feed */
     .time-log-card {
@@ -1652,16 +1691,51 @@ main#hourLogView.active {
 
 @media (max-width: 768px) {
     .countdown-panel {
-        flex-direction: column !important;
-        gap: 1.5rem !important;
-        padding: 2rem 1rem !important;
+        flex-direction: row !important;
+        justify-content: space-around !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+        padding: 1rem 0.5rem !important;
     }
 
     .countdown-divider {
-        display: none !important;
+        display: block !important;
+        height: 30px !important;
+        width: 1px !important;
+        background: rgba(255, 255, 255, 0.1);
+        margin: 0 !important;
     }
 
     .countdown-days {
-        font-size: 2rem !important;
+        font-size: 1.5rem !important;
+    }
+
+    .countdown-label {
+        font-size: 0.75rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+
+    .countdown-unit {
+        font-size: 0.75rem !important;
+    }
+
+
+    /* Mobile specific font size reductions for professional feel */
+    .glass-panel h2 {
+        font-size: 1.2rem;
+        margin-bottom: 1rem;
+    }
+
+    .btn-primary {
+        padding: 0.8rem;
+        font-size: 1rem;
+    }
+
+    .revision-card {
+        padding: 1rem;
+    }
+
+    .card-topic {
+        font-size: 1.1rem;
     }
 }

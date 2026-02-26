@@ -769,6 +769,9 @@ function completeRevision(sessionId, revType) {
 function renderTodayRevisions() {
     todayRevisionList.innerHTML = '';
     const dueToday = getRevisionsDueToday();
+    const panel = document.getElementById('todayRevisionsPanel');
+    const topSlot = document.getElementById('todayRevisionsSlot');
+    const defaultHome = document.querySelector('.dashboard-section');
 
     if (dueToday.length === 0) {
         todayRevisionList.innerHTML = `
@@ -777,7 +780,16 @@ function renderTodayRevisions() {
                 <p>No 2-4-7 revisions strictly due today. Great job!</p>
             </div>
         `;
+        // Move back to default position if it was in the top slot
+        if (panel && defaultHome && panel.parentElement === topSlot) {
+            defaultHome.insertBefore(panel, defaultHome.firstChild);
+        }
         return;
+    }
+
+    // Revisions exist — move panel to the top slot (between AI Insight and Timer)
+    if (panel && topSlot && panel.parentElement !== topSlot) {
+        topSlot.appendChild(panel);
     }
 
     dueToday.forEach((session, index) => {
@@ -811,6 +823,7 @@ function renderTodayRevisions() {
         todayRevisionList.appendChild(card);
     });
 }
+
 
 // Inject All Topics List View
 function renderAllTopics() {
@@ -1441,7 +1454,16 @@ function renderStudyHoursChart() {
         }
     });
 
-    const labels = Object.keys(dateMap).map(formatDateLabel);
+    const formatLocalDate = (date) => {
+        const d = new Date(date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const labels = Object.keys(dateMap).map(key => {
+        const [y, m, d] = key.split('-').map(Number);
+        const date = new Date(y, m - 1, d);
+        return formatDateLabel(date);
+    });
     const data = Object.values(dateMap).map(v => parseFloat(v.toFixed(2)));
 
     const ctx = document.getElementById('chartStudyHours').getContext('2d');
@@ -2025,7 +2047,7 @@ Only include subjects with hours > 0. Use exact decimal hours from the logs.`;
 
 ## IMPORTANT CONTEXT
 This student has GRADED ACADEMIC SUBJECTS and PERSONAL INTERESTS. Distinguish them:
-- ACADEMIC (graded, exams): Physics, Chemistry, Maths, English, Nepali — these decide their grades
+- ACADEMIC (graded, exams): Physics, Chemistry, Maths, Computer, English, Nepali — these decide their grades as a grade 12 Science student
 - PERSONAL INTEREST (not graded): App development, coding projects, robotics — valuable skills but NOT on their syllabus
 - WELLNESS (not study): Meditation, sleep, stretches — important for health, not study hours
 - UNPRODUCTIVE: Wasted time, couldn't concentrate — lost hours
@@ -2116,9 +2138,9 @@ Where X is a number from 1 to 10.`;
             // Remove the rating bracket from the visual text
             aiText = aiText.replace(/\[\[RATING:\s*\d+\/10\]\]/gi, '').trim();
 
-            // Save to history list (Overwrite if exists for the same day and period)
-            const todayStr = new Date().toLocaleDateString();
-            const existingIndex = aiRatingsHistory.findIndex(r => r.dateLabel === todayStr && r.period === currentPeriod);
+            // Save to history list (Overwrite if exists for the same day)
+            const targetDate = document.getElementById('insightsDatePicker').value || new Date().toISOString().split('T')[0];
+            const existingIndex = aiRatingsHistory.findIndex(r => r.dateLabel === targetDate);
 
             if (existingIndex !== -1) {
                 aiRatingsHistory[existingIndex].score = score;
@@ -2126,8 +2148,7 @@ Where X is a number from 1 to 10.`;
             } else {
                 aiRatingsHistory.push({
                     timestamp: Date.now(),
-                    dateLabel: todayStr,
-                    period: currentPeriod,
+                    dateLabel: targetDate,
                     score: score
                 });
             }
@@ -2324,7 +2345,7 @@ async function renderDailyInsight() {
                     'Authorization': `Bearer ${apiKey}`
                 },
                 body: JSON.stringify({
-                    model: 'llama3-70b-8192',
+                    model: 'llama-3.3-70b-versatile',
                     messages: [{ role: 'system', content: prompt }],
                     temperature: 0.7, // Some variety but logically sound
                     max_tokens: 100
