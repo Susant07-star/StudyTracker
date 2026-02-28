@@ -8,9 +8,47 @@ const SUBJECT_COLORS = {
     'Nepali': 'var(--color-nepali)'
 };
 
+// Timezone-safe local date string (YYYY-MM-DD) — avoids toISOString() UTC drift
+function getLocalDateStr(d) {
+    d = d || new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Check if a time log is a non-study activity (excluded from study charts)
+function isNonStudyLog(log) {
+    if (log.subject === 'Sleep') return true;
+    const taskLower = (log.task || '').toLowerCase();
+    return /\b(sleep|slept|nap|sleeping)\b/.test(taskLower);
+}
+
 let studySessions = JSON.parse(localStorage.getItem('studySessions')) || [];
 let timeLogs = JSON.parse(localStorage.getItem('timeLogs')) || [];
 let aiRatingsHistory = JSON.parse(localStorage.getItem('aiRatingsHistory')) || [];
+
+// Migrate old dateLabel formats to YYYY-MM-DD, add period field, and deduplicate
+{
+    let changed = false;
+    const byKey = {};
+    aiRatingsHistory.forEach(r => {
+        if (r.dateLabel && !/^\d{4}-\d{2}-\d{2}$/.test(r.dateLabel)) {
+            const d = new Date(r.dateLabel);
+            r.dateLabel = !isNaN(d.getTime()) ? getLocalDateStr(d) : getLocalDateStr(new Date(r.timestamp));
+            changed = true;
+        }
+        // Migrate: old entries without period field default to 'today'
+        if (!r.period) { r.period = 'today'; changed = true; }
+        // Dedup key: date + period (so daily, weekly, monthly ratings coexist)
+        const key = `${r.dateLabel}_${r.period}`;
+        if (!byKey[key] || r.timestamp > byKey[key].timestamp) {
+            byKey[key] = r;
+        }
+    });
+    const deduped = Object.values(byKey);
+    if (changed || deduped.length !== aiRatingsHistory.length) {
+        aiRatingsHistory = deduped;
+        localStorage.setItem('aiRatingsHistory', JSON.stringify(aiRatingsHistory));
+    }
+}
 
 // Immediately seed IndexedDB mirror from localStorage if data exists
 // (ensures IndexedDB always has a copy even if it was never mirrored before)
@@ -188,7 +226,7 @@ addTimeLogForm.addEventListener('submit', (e) => {
     autoBackupSync();
 
     addTimeLogForm.reset();
-    document.getElementById('timeDateInput').value = new Date().toISOString().split('T')[0];
+    document.getElementById('timeDateInput').value = getLocalDateStr();
     // Reset textarea height after clearing
     const notesEl = document.getElementById('timeNotesInput');
     notesEl.style.height = 'auto';
@@ -433,7 +471,7 @@ async function init() {
     }
 
     // Set today's date in form by default
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateStr();
     dateReadInput.value = today;
 
     // Display current date in header gracefully
@@ -451,8 +489,8 @@ async function init() {
     }, 60000);
 
     // Set default date for Time Tracker to today
-    document.getElementById('timeDateInput').value = new Date().toISOString().split('T')[0];
-    document.getElementById('historyDateFilter').value = new Date().toISOString().split('T')[0];
+    document.getElementById('timeDateInput').value = getLocalDateStr();
+    document.getElementById('historyDateFilter').value = getLocalDateStr();
 
     // Initial render
     renderDashboard();
@@ -1026,7 +1064,7 @@ function exportBackup() {
 
     const a1 = document.createElement('a');
     a1.href = studyUrl;
-    a1.download = `StudyTracker_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    a1.download = `StudyTracker_Backup_${getLocalDateStr()}.json`;
     document.body.appendChild(a1);
     a1.click();
     document.body.removeChild(a1);
@@ -1040,7 +1078,7 @@ function exportBackup() {
 
         const a2 = document.createElement('a');
         a2.href = aiUrl;
-        a2.download = `StudyTracker_AIRatings_${new Date().toISOString().split('T')[0]}.json`;
+        a2.download = `StudyTracker_AIRatings_${getLocalDateStr()}.json`;
 
         // Slight delay to prevent some browsers from blocking the second download
         setTimeout(() => {
@@ -1290,40 +1328,80 @@ btnSaveApiKey.addEventListener('click', () => {
 
 loadApiKey();
 
-// --- AI Insights Storage (Latest Only) ---
-// Only keeps the LATEST insights. Old ones are deleted when new ones are generated.
-
-// --- AI Insights (keep latest in localStorage to survive refresh) ---
+// --- AI Insights (per-date storage, capped at 30 days) ---
 
 let lastInsightsPeriod = null;
 
-function saveLatestInsights(feedbackHtml, chartData, periodLabel, ratingObj) {
-    localStorage.setItem('aiLatestInsights', JSON.parse(JSON.stringify({
+function saveLatestInsights(feedbackHtml, chartData, periodLabel, ratingObj, targetDate) {
+    const insightData = {
         feedback: feedbackHtml,
         chartData: chartData || null,
         period: periodLabel,
         rating: ratingObj || null,
         timestamp: Date.now()
-    })));
+    };
+
+    // Save per-date insights map
+    let insightsMap = {};
+    try { insightsMap = JSON.parse(localStorage.getItem('aiInsightsMap') || '{}'); } catch (e) {}
+    insightsMap[targetDate] = insightData;
+
+    // Cap at 30 entries (remove oldest)
+    const entries = Object.entries(insightsMap);
+    if (entries.length > 30) {
+        entries.sort(([, a], [, b]) => a.timestamp - b.timestamp);
+        entries.slice(0, entries.length - 30).forEach(([key]) => delete insightsMap[key]);
+    }
+    localStorage.setItem('aiInsightsMap', JSON.stringify(insightsMap));
+}
+
+function loadInsightsForDate(dateStr) {
+    try {
+        const insightsMap = JSON.parse(localStorage.getItem('aiInsightsMap') || '{}');
+        const data = insightsMap[dateStr];
+        if (data && data.feedback) {
+            document.getElementById('aiFeedbackContent').innerHTML = data.feedback;
+            if (data.chartData && data.chartData.subjectHours) renderSubjectDistChartWithData(data.chartData.subjectHours);
+            if (data.rating) renderStarRating(data.rating.score);
+            else document.getElementById('aiRatingContainer').style.display = 'none';
+            lastInsightsPeriod = data.period;
+            updateHistoryStatus();
+            return true;
+        }
+    } catch (e) {}
+    return false;
+}
+
+function showInsightsPlaceholder() {
+    document.getElementById('aiFeedbackContent').innerHTML = `
+        <div class="ai-placeholder">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <p>Click <strong>"Generate AI Insights"</strong> to get personalized study feedback & analysis for this date.</p>
+        </div>`;
+    document.getElementById('aiRatingContainer').style.display = 'none';
+    lastInsightsPeriod = null;
+    updateHistoryStatus();
 }
 
 function loadLatestInsights() {
+    // Try today's date first
+    const today = getLocalDateStr();
+    if (loadInsightsForDate(today)) return;
+
+    // Fall back to most recent available insight
     try {
-        const data = JSON.parse(localStorage.getItem('aiLatestInsights') || 'null');
-        if (!data || !data.feedback) return;
-        const contentEl = document.getElementById('aiFeedbackContent');
-        contentEl.innerHTML = data.feedback;
-        if (data.chartData && data.chartData.subjectHours) {
-            renderSubjectDistChartWithData(data.chartData.subjectHours);
+        const insightsMap = JSON.parse(localStorage.getItem('aiInsightsMap') || '{}');
+        const sorted = Object.entries(insightsMap).sort(([, a], [, b]) => b.timestamp - a.timestamp);
+        if (sorted.length > 0) {
+            const [, data] = sorted[0];
+            document.getElementById('aiFeedbackContent').innerHTML = data.feedback;
+            if (data.chartData && data.chartData.subjectHours) renderSubjectDistChartWithData(data.chartData.subjectHours);
+            if (data.rating) renderStarRating(data.rating.score);
+            else document.getElementById('aiRatingContainer').style.display = 'none';
+            lastInsightsPeriod = data.period;
+            updateHistoryStatus();
         }
-        if (data.rating) {
-            renderStarRating(data.rating.score);
-        } else {
-            document.getElementById('aiRatingContainer').style.display = 'none';
-        }
-        lastInsightsPeriod = data.period;
-        updateHistoryStatus();
-    } catch (e) { /* ignore */ }
+    } catch (e) {}
 }
 
 function updateHistoryStatus() {
@@ -1338,26 +1416,30 @@ function updateHistoryStatus() {
 
 // Date picker initialization
 const insightsDatePicker = document.getElementById('insightsDatePicker');
-insightsDatePicker.value = new Date().toISOString().split('T')[0];
+insightsDatePicker.value = getLocalDateStr();
 
 insightsDatePicker.addEventListener('change', () => {
     renderAllCharts();
+    if (!loadInsightsForDate(insightsDatePicker.value)) showInsightsPlaceholder();
 });
 
 document.getElementById('btnPrevDay').addEventListener('click', () => {
-    const d = new Date(insightsDatePicker.value);
-    d.setDate(d.getDate() - 1);
-    insightsDatePicker.value = d.toISOString().split('T')[0];
+    const [y, m, d] = insightsDatePicker.value.split('-').map(Number);
+    const date = new Date(y, m - 1, d - 1);
+    insightsDatePicker.value = getLocalDateStr(date);
     renderAllCharts();
+    if (!loadInsightsForDate(insightsDatePicker.value)) showInsightsPlaceholder();
 });
 
 document.getElementById('btnNextDay').addEventListener('click', () => {
-    const d = new Date(insightsDatePicker.value);
-    d.setDate(d.getDate() + 1);
-    const today = new Date().toISOString().split('T')[0];
-    if (d.toISOString().split('T')[0] <= today) {
-        insightsDatePicker.value = d.toISOString().split('T')[0];
+    const [y, m, d] = insightsDatePicker.value.split('-').map(Number);
+    const date = new Date(y, m - 1, d + 1);
+    const today = getLocalDateStr();
+    const nextStr = getLocalDateStr(date);
+    if (nextStr <= today) {
+        insightsDatePicker.value = nextStr;
         renderAllCharts();
+        if (!loadInsightsForDate(insightsDatePicker.value)) showInsightsPlaceholder();
     }
 });
 
@@ -1435,7 +1517,7 @@ Chart.defaults.font.family = 'Outfit, sans-serif';
 // --- Chart 1: Study Hours Trend ---
 function renderStudyHoursChart() {
     const { start } = getDateRange(currentPeriod);
-    const logs = getFilteredLogs(currentPeriod);
+    const logs = getFilteredLogs(currentPeriod).filter(log => !isNonStudyLog(log));
 
     // Build date labels and data
     const dateMap = {};
@@ -1444,7 +1526,7 @@ function renderStudyHoursChart() {
     for (let i = 0; i < numDays; i++) {
         const d = new Date(start);
         d.setDate(d.getDate() + i);
-        const key = d.toISOString().split('T')[0];
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         dateMap[key] = 0;
     }
 
@@ -1615,7 +1697,7 @@ function renderSubjectDistChart() {
 
 // --- Chart 3: Peak Productivity Hours ---
 function renderPeakHoursChart() {
-    const logs = getFilteredLogs(currentPeriod);
+    const logs = getFilteredLogs(currentPeriod).filter(log => !isNonStudyLog(log));
     // Count hours worked per hour-of-day slot
     const hourBuckets = new Array(24).fill(0);
 
@@ -1796,18 +1878,28 @@ function renderRevisionChart() {
 
 // --- Chart 5: AI Rating Trend ---
 function renderAIRatingChart() {
-    const { start, end } = getDateRange(currentPeriod);
+    const { start } = getDateRange(currentPeriod);
+    const numDays = currentPeriod === 'today' ? 1 : currentPeriod === 'week' ? 7 : 30;
 
-    // Sort chronologically and filter to current period
-    const sortedHistory = [...aiRatingsHistory].sort((a, b) => a.timestamp - b.timestamp);
-    const filteredHistory = sortedHistory.filter(r => {
-        const d = new Date(r.timestamp);
-        // Include if within range. Also include if period is 'today' since date range boundaries might be tight.
-        if (currentPeriod === 'today') return r.dateLabel === new Date().toLocaleDateString();
-        return d >= start && d <= new Date(end.getTime() + 86400000); // end is start of day, pad 1 day
-    });
+    // Build set of dates in the selected range
+    const datesInRange = [];
+    for (let i = 0; i < numDays; i++) {
+        const d = new Date(start);
+        d.setDate(d.getDate() + i);
+        datesInRange.push(getLocalDateStr(d));
+    }
 
-    const labels = filteredHistory.length > 0 ? filteredHistory.map(r => r.dateLabel) : ['No Data'];
+    // Filter ratings: always show daily ratings within range (weekly/monthly don't generate ratings)
+    const filteredHistory = [...aiRatingsHistory]
+        .filter(r => r.period === 'today' && datesInRange.includes(r.dateLabel))
+        .sort((a, b) => a.dateLabel.localeCompare(b.dateLabel));
+
+    const labels = filteredHistory.length > 0
+        ? filteredHistory.map(r => {
+            const [y, m, d] = r.dateLabel.split('-').map(Number);
+            return formatDateLabel(new Date(y, m - 1, d));
+        })
+        : ['No Data'];
     const data = filteredHistory.length > 0 ? filteredHistory.map(r => r.score) : [];
 
     const ctx = document.getElementById('chartAIRating').getContext('2d');
@@ -1906,6 +1998,7 @@ async function generateAIInsights() {
     let aiChartData = null; // Track chart data for saving
 
     try {
+        const targetDate = document.getElementById('insightsDatePicker').value || getLocalDateStr();
         const logs = getFilteredLogs(currentPeriod);
         const periodLabel = currentPeriod === 'today' ? "today" : currentPeriod === 'week' ? "the past 7 days" : "the past 30 days";
 
@@ -2034,76 +2127,205 @@ Only include subjects with hours > 0. Use exact decimal hours from the logs.`;
             .map(([s, h]) => `${s}: ${h.toFixed(1)}h`)
             .join(', ');
 
-        // Build study sessions context
-        const sessionsContext = studySessions.slice(0, 20).map(s => {
-            const revStatus = ['rev2', 'rev4', 'rev7'].map(r => {
-                const rev = typeof s.revisions[r] === 'boolean' ? { done: s.revisions[r] } : s.revisions[r];
-                return `${r}: ${rev.done ? '✅' : '❌'}`;
-            }).join(', ');
-            return `- ${s.subject}/${s.topic} (read: ${s.dateRead}) → ${revStatus}`;
+        // Build study sessions context with due dates and overdue info
+        const todayForRev = new Date();
+        todayForRev.setHours(0, 0, 0, 0);
+        const formatRevDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const revDaysDiff = (d1, d2) => Math.round((d2.getTime() - d1.getTime()) / 86400000);
+
+        const overdueRevisions = [];
+        const dueTodayRevisions = [];
+
+        const sessionsContext = studySessions.slice(0, 30).map(s => {
+            const baseDate = new Date(s.dateRead); baseDate.setHours(0, 0, 0, 0);
+            const rev2 = typeof s.revisions.rev2 === 'boolean' ? { done: s.revisions.rev2, completedAt: null } : s.revisions.rev2;
+            const rev4 = typeof s.revisions.rev4 === 'boolean' ? { done: s.revisions.rev4, completedAt: null } : s.revisions.rev4;
+            const rev7 = typeof s.revisions.rev7 === 'boolean' ? { done: s.revisions.rev7, completedAt: null } : s.revisions.rev7;
+
+            const revDetails = [];
+
+            // Helper: build detail string for a revision step and track overdue/due-today
+            const describeRev = (revObj, label, dueDate, isBlocked) => {
+                if (revObj.done) {
+                    const when = revObj.completedAt ? formatRevDate(new Date(revObj.completedAt)) : '?';
+                    return `${label}: ✅ done (completed ${when})`;
+                }
+                if (isBlocked) return `${label}: ⏸️ blocked (finish previous step first)`;
+                const dueDateStr = formatRevDate(dueDate);
+                const diff = revDaysDiff(dueDate, todayForRev);
+                if (diff > 0) {
+                    overdueRevisions.push(`${s.subject}/${s.topic} — ${label} revision was due ${dueDateStr}, now ${diff} day(s) OVERDUE`);
+                    return `${label}: ❌ OVERDUE by ${diff} day(s) (due: ${dueDateStr})`;
+                } else if (diff === 0) {
+                    dueTodayRevisions.push(`${s.subject}/${s.topic} — ${label} revision is DUE TODAY`);
+                    return `${label}: 🔔 DUE TODAY (${dueDateStr})`;
+                } else {
+                    return `${label}: ⏳ upcoming (due: ${dueDateStr}, in ${Math.abs(diff)} day(s))`;
+                }
+            };
+
+            // rev2: due 2 days after dateRead
+            const rev2Due = new Date(baseDate.getTime() + 2 * 86400000);
+            revDetails.push(describeRev(rev2, '2-day', rev2Due, false));
+
+            // rev4: due 4 days after rev2 completion (or estimated baseDate+2 if no completedAt)
+            const rev4Ref = rev2.done && rev2.completedAt ? new Date(new Date(rev2.completedAt).setHours(0,0,0,0)) : new Date(baseDate.getTime() + 2 * 86400000);
+            const rev4Due = new Date(rev4Ref.getTime() + 4 * 86400000);
+            revDetails.push(describeRev(rev4, '4-day', rev4Due, !rev2.done));
+
+            // rev7: due 7 days after rev4 completion
+            const rev7Ref = rev4.done && rev4.completedAt ? new Date(new Date(rev4.completedAt).setHours(0,0,0,0)) : new Date(rev4Ref.getTime() + 4 * 86400000);
+            const rev7Due = new Date(rev7Ref.getTime() + 7 * 86400000);
+            revDetails.push(describeRev(rev7, '7-day', rev7Due, !rev4.done));
+
+            return `- ${s.subject}/${s.topic} (read: ${s.dateRead}) → ${revDetails.join(' | ')}`;
         }).join('\n');
 
-        const feedbackPrompt = `You are this student's personal study mentor. You have their COMPLETE activity log with exact times, task names, and notes. Read EVERY activity carefully. Understand what they actually did, not just the subject tags.
+        // Build a dedicated overdue/due-today summary for the AI
+        let revisionAlertSection = '';
+        if (dueTodayRevisions.length > 0 || overdueRevisions.length > 0) {
+            revisionAlertSection = '\n## ⚠️ REVISION ALERTS (ACT ON THESE)\n';
+            if (overdueRevisions.length > 0) {
+                revisionAlertSection += 'OVERDUE (student MISSED these):\n' + overdueRevisions.map(r => `  🔴 ${r}`).join('\n') + '\n';
+            }
+            if (dueTodayRevisions.length > 0) {
+                revisionAlertSection += 'DUE TODAY (must complete today):\n' + dueTodayRevisions.map(r => `  🟡 ${r}`).join('\n') + '\n';
+            }
+        }
 
-## IMPORTANT CONTEXT
-This student has GRADED ACADEMIC SUBJECTS and PERSONAL INTERESTS. Distinguish them:
-- ACADEMIC (graded, exams): Physics, Chemistry, Maths, Computer, English, Nepali — these decide their grades as a grade 12 Science student
-- PERSONAL INTEREST (not graded): App development, coding projects, robotics — valuable skills but NOT on their syllabus
-- WELLNESS (not study): Meditation, sleep, stretches — important for health, not study hours
-- UNPRODUCTIVE: Wasted time, couldn't concentrate — lost hours
+        // Period-specific analysis focus
+        const periodAnalysisFocus = currentPeriod === 'today' ? `
+## DAILY MICRO-ANALYSIS (Today: ${targetDate})
+This is a SINGLE DAY deep dive. Analyze at granular level:
 
-When analyzing, ALWAYS separate academic study hours from personal interest hours. The student needs to know: "Out of 17h logged, only Xh were actual syllabus study."
+1. **HOUR-BY-HOUR AUDIT**: Walk through the day chronologically. What did they do from waking to sleeping? Identify every gap, every wasted slot, every productive stretch. Be specific — "From 10:00-11:30 you did X, but then 11:30-13:00 was completely unaccounted for."
 
-## ALL-TIME DATA
-- Total hours logged: ${lifetimeTotalHours.toFixed(1)}h across ${allLogs.length} activities
-- Study sessions being tracked: ${studySessions.length}
+2. **ACADEMIC vs EVERYTHING ELSE**: Calculate exact hours for graded subjects (Physics, Chemistry, Maths, Computer, English, Nepali) vs personal projects (coding, app dev, robotics) vs wellness (meditation, sleep, stretches) vs wasted time. Example: "Out of ${totalHours.toFixed(1)}h logged: Xh academic, Yh personal interest, Zh wellness, Wh unproductive."
+
+3. **FOCUS QUALITY**: Did they do deep work (90+ min unbroken on one subject) or scattered short bursts? Short context-switching kills retention. Call out any session under 30 min as low-impact.
+
+4. **ENERGY MISALLOCATION**: Were hard subjects (Physics, Maths, Chemistry) done during peak cognitive hours (morning/early afternoon) or shoved into low-energy evening slots? This matters enormously.
+
+5. **PROCRASTINATION DETECTION**: Look for patterns — did they start late? Take excessive breaks? Do easy/fun subjects first to avoid hard ones? Spending time on app dev before touching Physics is a red flag.
+
+6. **REVISION COMPLIANCE**: Check today's 2-4-7 revision status. Did they complete what was due? Every missed revision compounds forgetting.
+
+7. **SLEEP & RECOVERY**: If sleep data is present, evaluate: Did they get 7-8h? Late nights destroy next-day focus. A student sleeping at 1 AM and waking at 6 AM is running on fumes.
+
+8. **BURNOUT CHECK**: Signs to flag — declining session lengths throughout the day, increasing "wasted time" entries, notes mentioning inability to focus, very long days (14h+) without proper breaks.` 
+        : currentPeriod === 'week' ? `
+## WEEKLY PATTERN ANALYSIS (${periodLabel})
+This is a 7-DAY pattern analysis. Look for TRENDS and CONSISTENCY:
+
+1. **CONSISTENCY SCORE**: How many of the 7 days had meaningful study (4h+ academic)? A student studying 14h one day and 0h the next is worse than steady 6h/day. Calculate: days with 4h+ study / 7.
+
+2. **ACADEMIC HOURS TREND**: Are daily academic hours increasing, decreasing, or flat across the week? Plot the direction. "Monday: 6h, Tuesday: 5h, ... Sunday: 2h" = alarming decline.
+
+3. **SUBJECT COVERAGE MAP**: Which academic subjects got time THIS WEEK vs which got ZERO? With ${Math.ceil((new Date('2026-03-20') - new Date().setHours(0, 0, 0, 0)) / 86400000)} days to pre-boards, every subject needs regular contact. Flag any subject with 0h this week as CRITICAL NEGLECT.
+
+4. **WEEKLY RHYTHM**: Which days were strongest/weakest? Is there a pattern (e.g., always low on weekends)? Identify the student's natural productive days vs slump days.
+
+5. **REVISION DISCIPLINE (WEEK VIEW)**: How many revisions were due this week vs completed? Calculate completion rate. Below 70% = memory is actively decaying.
+
+6. **PERSONAL INTEREST vs ACADEMIC RATIO (WEEKLY)**: If personal projects took >20% of total weekly hours, the balance is off with exams this close.
+
+7. **CUMULATIVE FATIGUE**: Did performance degrade later in the week? If Thursday-Sunday shows declining hours and increasing "wasted time", burnout is building.
+
+8. **PEAK PERFORMANCE WINDOWS**: Across the week, when (time of day) was the student most productive? Are they consistently leveraging this window for hard subjects?`
+        : `
+## MONTHLY STRATEGIC REVIEW (${periodLabel})
+This is a 30-DAY macro analysis. Focus on BIG PICTURE and EXAM READINESS:
+
+1. **EXAM COUNTDOWN REALITY CHECK**: With ${Math.ceil((new Date('2026-03-20') - new Date().setHours(0, 0, 0, 0)) / 86400000)} days to Pre-Board and ${Math.ceil((new Date('2026-04-27') - new Date().setHours(0, 0, 0, 0)) / 86400000)} days to Finals — is this student's monthly output sufficient? Calculate required daily academic hours to cover remaining syllabus.
+
+2. **MONTHLY ACADEMIC HOURS TOTAL**: Sum all academic-only hours. Compare against what's needed. A Grade 12 Science student should be doing 6-8h of pure academic study daily in the final stretch. Are they meeting this?
+
+3. **SUBJECT DISTRIBUTION (MONTH)**: Pie chart analysis — which subjects consumed what percentage of the month? Identify the most neglected subjects. A subject with <5% of monthly hours needs emergency attention.
+
+4. **TREND DIRECTION**: Compare Week 1 vs Week 2 vs Week 3 vs Week 4 of the month. Is the student improving, plateauing, or declining? This is the most important metric.
+
+5. **CONSISTENCY OVER 30 DAYS**: How many days had 0h study? How many had 6h+? Calculate the "discipline ratio" = (days with 4h+ academic) / (total days in period). Below 0.7 is concerning.
+
+6. **REVISION SYSTEM HEALTH**: Monthly completion rate for 2-4-7 revisions. Is the system being maintained or has it collapsed? Old unreviewed sessions = wasted initial study time.
+
+7. **PERSONAL GROWTH vs EXAM PRIORITIES**: Monthly hours on personal interests vs academics. With exams this close, personal projects should be minimal (<10% of total time).
+
+8. **BURNOUT TRAJECTORY**: Is there a pattern of high effort followed by crash days? Are crash periods getting longer? Sustainable pace > sporadic bursts.
+
+9. **BIGGEST WINS & BIGGEST FAILURES**: Name the 3 best days and 3 worst days of the month by academic output. What was different about them? This reveals what conditions drive peak performance.`;
+
+        const feedbackPrompt = `You are an elite study coach and academic strategist for a Grade 12 Science student in Nepal. You have their COMPLETE activity data. Your job is to deliver a brutally honest, data-driven analysis that will materially improve their exam results.
+
+DO NOT give generic advice. EVERY claim must reference specific data from the logs below.
+
+## STUDENT PROFILE
+- Grade 12 Science, Nepal Education Board
+- Academic subjects (GRADED, exam-critical): Physics, Chemistry, Maths, Computer, English, Nepali
+- Personal interests (NOT graded): App development, coding projects, robotics — valuable but NOT on the exam
+- Wellness activities (NOT study): Meditation, sleep, stretches, exercise
+- Unproductive time: Wasted time, couldn't concentrate, distracted
+
+## EXAM TIMELINE (NON-NEGOTIABLE DEADLINES)
+- Pre-Board Exam: March 20, 2026 → ${Math.ceil((new Date('2026-03-20') - new Date().setHours(0, 0, 0, 0)) / 86400000)} days remaining
+- Final Board Exam: April 27, 2026 → ${Math.ceil((new Date('2026-04-27') - new Date().setHours(0, 0, 0, 0)) / 86400000)} days remaining
+Every hour matters. Frame all analysis against these deadlines.
+
+## ALL-TIME STATS
+- Lifetime hours logged: ${lifetimeTotalHours.toFixed(1)}h across ${allLogs.length} activities
+- Active study sessions (spaced repetition): ${studySessions.length}
 
 ## CURRENT PERIOD: ${periodLabel}
-- Total hours: ${totalHours.toFixed(1)}h | Activities: ${logs.length} | Active days: ${Object.keys(dailyBreakdown).length}
-- Revision completion: ${revDone}/${revTotal}
+- Hours this period: ${totalHours.toFixed(1)}h | Activities: ${logs.length} | Active days: ${Object.keys(dailyBreakdown).length}
+- Revision stats: ${revDone}/${revTotal} completed
+- Subject breakdown: ${subjectSummary || 'No subject data'}
 
-## UPCOMING EXAMS (CRITICAL)
-- Pre-Board Exam: March 20, 2026 (${Math.ceil((new Date('2026-03-20') - new Date().setHours(0, 0, 0, 0)) / 86400000)} days left)
-- Final Board Exam: April 27, 2026 (${Math.ceil((new Date('2026-04-27') - new Date().setHours(0, 0, 0, 0)) / 86400000)} days left)
-
-## DETAILED ACTIVITY LOG (read each one carefully):
+## DETAILED ACTIVITY LOG (READ EVERY ENTRY — times, durations, subjects, notes):
 ${rawLogData}
 
-## Daily Totals: ${Object.entries(dailyBreakdown).map(([d, h]) => `${d}: ${h.toFixed(1)}h`).join(' | ') || 'No data'}
-## Peak Hours: ${peakHoursSummary || 'No data'}
+## DAILY TOTALS:
+${Object.entries(dailyBreakdown).map(([d, h]) => `${d}: ${h.toFixed(1)}h`).join(' | ') || 'No data'}
 
-## Study Sessions (spaced repetition):
+## PEAK STUDY HOURS:
+${peakHoursSummary || 'No data'}
+
+## SPACED REPETITION SESSIONS (2-4-7 method):
 ${sessionsContext || 'None yet'}
+${revisionAlertSection}
+${periodAnalysisFocus}
 
-## YOUR TASK
+## RESPONSE STRUCTURE
+Organize your response with these sections (use markdown headers):
 
-Read each activity above carefully. Analyze the student's productivity, consistency, and alignment with their academic goals.
+### 📊 Performance Overview
+Start with a quick summary — period type, total hours, academic vs non-academic split. Be concise.
 
-Now analyze:
-1. ACADEMIC vs NON-ACADEMIC split: How many hours went to actual graded subjects vs personal projects? Be blunt.
-2. Subject-wise breakdown of ACADEMIC hours only: Which subjects got time? Which are dangerously neglected?
-3. Productive vs unproductive hours: call out specific wasted time slots.
-4. Schedule analysis: Are they using their best morning hours for hard subjects or wasting them?
-5. Revision discipline: Are they doing their 2-4-7 reviews? This is critical for retention.
-6. Personal interests assessment: Are side projects eating into study time? Should they be scheduled differently?
+### 🎯 Deep Analysis
+Follow the numbered analysis points from the period-specific section above. Use data. Be specific. Reference exact activities, times, and subjects.
 
-## THE "NEXT DAY" ACTION PLAN (CRITICAL)
-End your response with a section titled "--- MEANINGFUL ACTION PLAN FOR TOMORROW ---". 
-This section must be a concrete, time-blocked schedule. Requirements:
-- Prioritize subjects with the closest exams first (refer to Upcoming Exams).
-- Include specific chapters or topics mentioned in their "Ongoing Revisions" or "Study Sessions".
-- Allocate specific time blocks (e.g., "06:00 - 08:00: Physics - Optics").
-- Include scheduled breaks.
-- Ensure the plan is realistic but challenging.
-- Provide a "Mentor's Note" at the bottom of the plan with one specific piece of advice to improve focus based on today's wasted time.
+### ⚠️ Critical Warnings
+Flag anything alarming: neglected subjects, broken revision chains, declining trends, sleep deprivation, burnout signs, exam readiness gaps. Only include if genuinely concerning — don't manufacture warnings.
 
-Be brutally honest. Reference specific activities by name and time. This student wants REAL coaching, not encouragement.
+### 📈 What's Working
+Briefly acknowledge what the student is doing RIGHT. Specific examples only — no generic praise.
 
+### 🗓️ Action Plan
+${currentPeriod === 'today' ? 
+'Provide a concrete TOMORROW SCHEDULE with time blocks (e.g., "06:00-08:00: Physics — Optics chapter problems"). Prioritize by exam proximity and subject neglect. Include breaks. Must be realistic but push the student.' :
+currentPeriod === 'week' ?
+'Provide a NEXT WEEK STRATEGY: which subjects need emergency attention, suggested daily hour targets, specific topics to prioritize based on revision data and neglected areas.' :
+'Provide a NEXT MONTH GAME PLAN: week-by-week focus areas leading to exams, subject priority order, minimum daily targets, revision system repairs if needed.'}
+
+### 💬 Mentor\'s Note
+One paragraph of direct, personal advice. Address the student\'s specific patterns — not generic motivation. If they\'re doing well, push them harder. If they\'re struggling, identify the ROOT CAUSE and give one concrete fix.
+
+${currentPeriod === 'today' ? `
 CRITICAL FINAL INSTRUCTION:
-At the very end of your response, on a new line, you MUST provide an overall rating of the student's performance out of 10 based on their discipline, focus, and adherence to academic subjects vs distractions.
-Format it EXACTLY like this with no extra spaces or words around the brackets:
+At the very end of your response, on its own line, you MUST rate this student's performance for ${targetDate} on a scale of 1 to 10.
+Base the DAILY score on: hours of academic study (not personal projects), focus quality, revision compliance, schedule discipline, energy management. 1-3 = terrible day, 4-5 = below average, 6-7 = decent, 8-9 = strong day, 10 = exceptional.
+Format it EXACTLY like this on a new line:
 [[RATING: X/10]]
-Where X is a number from 1 to 10.`;
+Where X is a number from 1 to 10. This is mandatory — never skip it.` : `
+Do NOT include any [[RATING]] tag. This is a ${periodLabel} summary — ratings are only generated for individual days.`}`;
 
 
 
@@ -2114,7 +2336,7 @@ Where X is a number from 1 to 10.`;
                 model: 'llama-3.3-70b-versatile',
                 messages: [{ role: 'user', content: feedbackPrompt }],
                 temperature: 0.7,
-                max_tokens: 3000,
+                max_tokens: 4096,
             })
         });
 
@@ -2128,7 +2350,7 @@ Where X is a number from 1 to 10.`;
 
         if (!aiText) throw new Error('No response from AI');
 
-        // Extract Rating
+        // Extract Rating — only saved for daily ('today') period
         let ratingObj = null;
         const ratingMatch = aiText.match(/\[\[RATING:\s*(\d+)\/10\]\]/i);
         if (ratingMatch) {
@@ -2138,27 +2360,26 @@ Where X is a number from 1 to 10.`;
             // Remove the rating bracket from the visual text
             aiText = aiText.replace(/\[\[RATING:\s*\d+\/10\]\]/gi, '').trim();
 
-            // Save to history list (Overwrite if exists for the same day)
-            const targetDate = document.getElementById('insightsDatePicker').value || new Date().toISOString().split('T')[0];
-            const existingIndex = aiRatingsHistory.findIndex(r => r.dateLabel === targetDate);
+            if (currentPeriod === 'today') {
+                // Save to history — daily ratings only
+                const existingIndex = aiRatingsHistory.findIndex(r => r.dateLabel === targetDate && r.period === 'today');
 
-            if (existingIndex !== -1) {
-                aiRatingsHistory[existingIndex].score = score;
-                aiRatingsHistory[existingIndex].timestamp = Date.now();
-            } else {
-                aiRatingsHistory.push({
-                    timestamp: Date.now(),
-                    dateLabel: targetDate,
-                    score: score
-                });
+                if (existingIndex !== -1) {
+                    aiRatingsHistory[existingIndex].score = score;
+                    aiRatingsHistory[existingIndex].timestamp = Date.now();
+                } else {
+                    aiRatingsHistory.push({
+                        timestamp: Date.now(),
+                        dateLabel: targetDate,
+                        period: 'today',
+                        score: score
+                    });
+                }
+
+                localStorage.setItem('aiRatingsHistory', JSON.stringify(aiRatingsHistory));
+                autoBackupSync();
             }
 
-            localStorage.setItem('aiRatingsHistory', JSON.stringify(aiRatingsHistory));
-
-            // Trigger auto-backup so it syncs this new history
-            autoBackupSync();
-
-            // Render on UI
             renderStarRating(score);
             renderAIRatingChart();
         } else {
@@ -2171,17 +2392,17 @@ Where X is a number from 1 to 10.`;
         // Save latest to localStorage (survives refresh)
         const periodNames = { today: 'Today', week: 'This Week', month: 'This Month' };
         lastInsightsPeriod = `${periodNames[currentPeriod]} (${new Date().toLocaleDateString()})`;
-        saveLatestInsights(feedbackHtml, aiChartData, lastInsightsPeriod, ratingObj);
+        saveLatestInsights(feedbackHtml, aiChartData, lastInsightsPeriod, ratingObj, targetDate);
         updateHistoryStatus();
 
     } catch (error) {
         console.error('AI Insights error:', error);
         contentEl.innerHTML = `
-            < div class="ai-placeholder" style = "color: #fca5a5;" >
+            <div class="ai-placeholder" style="color: #fca5a5;">
                 <i class="fa-solid fa-triangle-exclamation" style="-webkit-text-fill-color: #fca5a5; background: none;"></i>
                 <p><strong>Error:</strong> ${error.message}</p>
                 <p style="font-size: 0.9rem; margin-top: 0.5rem;">Check your API key or try again.</p>
-            </div > `;
+            </div>`;
     } finally {
         btn.disabled = false;
         loadingEl.style.display = 'none';
@@ -2323,7 +2544,7 @@ async function renderDailyInsight() {
     const insightEl = document.getElementById('dailyInsightText');
     if (!insightEl) return;
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateStr();
     const storedInsight = JSON.parse(localStorage.getItem('dailyAiInsight') || 'null');
 
     // Check if we hit the cache
